@@ -1,106 +1,139 @@
-<!-- 這裡只列出關鍵修改的 Script 部分，確保你的 HTML 結構包含 id="page-report" -->
-
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-<script>
-// --- 核心邏輯：盤點項目渲染 ---
-function renderInventory(items) {
-    const list = document.getElementById('inventory-list');
-    list.innerHTML = items.map(item => `
-        <div class="card p-4 mb-3 bg-gray-800 rounded-lg border-l-4 ${getBorderColor(item)}">
-            <div class="flex justify-between items-center">
-                <div>
-                    <div class="text-xs text-gray-400">${item.code}</div>
-                    <div class="font-bold text-lg">${item.name}</div>
-                    <div class="text-sm text-blue-400">雲端庫存: ${item.stock}</div>
-                </div>
-                
-                <div class="flex gap-2">
-                    <!-- 一鍵打勾：代表數量正確 -->
-                    <button onclick="confirmCorrect('${item.itemKey}')" 
-                            class="p-3 bg-green-600 rounded-full hover:bg-green-500 shadow-lg">
-                        ✅
-                    </button>
-                    <!-- 點擊叉叉：代表數量有誤，進入輸入模式 -->
-                    <button onclick="showEditModal('${item.itemKey}')" 
-                            class="p-3 bg-red-600 rounded-full hover:bg-red-500 shadow-lg">
-                        ❌
-                    </button>
-                </div>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>庫存盤點系統 v2.6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .page { display: none; }
+        .page.active { display: block; }
+        body { background-color: #111827; color: white; -webkit-tap-highlight-color: transparent; }
+        .card-green { border-left: 4px solid #10b981; background-color: rgba(16, 185, 129, 0.1); }
+        .card-red { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
+        .card-none { border-left: 4px solid #4b5563; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 盤點分頁 -->
+        <div id="page-inventory" class="page active p-4">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-bold">庫存盤點</h1>
+                <button onclick="syncData()" class="px-3 py-1 bg-gray-700 rounded-full text-sm">↻ 同步雲端</button>
             </div>
-            ${item.userCount !== undefined ? `<div class="mt-2 text-right font-bold text-yellow-400">實盤: ${item.userCount}</div>` : ''}
+            <div id="inventory-list" class="space-y-3">
+                <!-- 項目由 JS 動態渲染 -->
+            </div>
         </div>
-    `).join('');
-}
 
-// 一鍵確認正確：直接將實盤數設為雲端數
-function confirmCorrect(itemKey) {
-    const item = state.items.find(i => i.itemKey === itemKey);
-    item.userCount = item.stock;
-    item.status = 'correct';
-    renderInventory(state.items);
-}
+        <!-- 報表分頁 -->
+        <div id="page-report" class="page p-4">
+            <h1 class="text-xl font-bold mb-6">報表匯出</h1>
+            <div class="space-y-4">
+                <button onclick="exportPPF()" class="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg">
+                    📊 生成當月銷售明細 (PPF 格式)
+                </button>
+                <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg">
+                    ⬇ 匯出本次盤點結果 (.xlsx)
+                </button>
+            </div>
+        </div>
 
-// --- 核心邏輯：匯出銷售 PPF 報表 (對應 115-4-OTC PPF_2.xlsx) ---
-async function exportPPF() {
-    toast('正在產出 115-4-OTC PPF 報表...');
-    try {
-        const res = await fetch(state.apiUrl, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                action: 'getSalesExport', 
-                token: state.auth.token 
-            })
-        });
-        const data = await res.json();
-        
-        if (!data.ok || data.sales.length === 0) return toast('⚠️ 本月尚無銷售資料');
-
-        // 1. 建立標題列與欄位
-        const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`];
-        const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"];
-        
-        // 2. 準備資料列
-        const rows = [...data.sales];
-
-        // 3. 按照 115-4-OTC PPF_2.xlsx 格式加入底部統計區
-        // 留白兩列
-        rows.push([], []); 
-        rows.push(["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"]);
-        rows.push(["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"]);
-
-        const ws = XLSX.utils.aoa_to_sheet([title, headers, ...rows]);
-        
-        // 設定單元格樣式與合併 (A1 到 I1 合併)
-        ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
-        
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-        
-        XLSX.writeFile(wb, `${data.year}-${data.month}-OTC_PPF.xlsx`);
-        toast('✅ 銷售報表已下載');
-    } catch (e) {
-        toast('❌ 匯出失敗: ' + e.message);
-    }
-}
-
-function getBorderColor(item) {
-    if (item.userCount === undefined) return 'border-gray-600';
-    return item.userCount === item.stock ? 'border-green-500' : 'border-red-500';
-}
-</script>
-
-<!-- 在報表頁面的 HTML 部分加入按鈕 -->
-<div id="page-report" class="page hidden p-4">
-    <div class="space-y-4">
-        <!-- 綠色按鈕：匯出符合 PPF_2 格式的銷售表 -->
-        <button onclick="exportPPF()" class="w-full py-4 bg-green-700 text-white rounded-xl font-bold shadow-lg">
-            📊 生成當月銷售明細 (PPF 格式)
-        </button>
-        
-        <!-- 藍色按鈕：原本的盤點結果匯出 -->
-        <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-700 text-white rounded-xl font-bold">
-            ⬇ 匯出當次盤點結果 (.xlsx)
-        </button>
+        <!-- 導覽列 -->
+        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-3">
+            <button onclick="showPage('inventory')" class="text-gray-400 focus:text-blue-400">📋 盤點</button>
+            <button onclick="showPage('report')" class="text-gray-400 focus:text-blue-400">📊 報表</button>
+        </div>
     </div>
-</div>
+
+    <script>
+        let state = {
+            apiUrl: '你的_GAS_部署網址', // 請填入你的 GAS 網址
+            items: [],
+            token: localStorage.getItem('token')
+        };
+
+        // 渲染清單：恢復一鍵打勾/叉叉模式
+        function renderItems() {
+            const list = document.getElementById('inventory-list');
+            list.innerHTML = state.items.map(item => {
+                let statusClass = 'card-none';
+                if (item.userCount !== undefined) {
+                    statusClass = item.userCount === item.stock ? 'card-green' : 'card-red';
+                }
+
+                return `
+                    <div class="p-4 rounded-lg ${statusClass} bg-gray-800">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="text-xs text-gray-500">${item.code}</div>
+                                <div class="font-bold">${item.name}</div>
+                                <div class="text-xs text-blue-400">雲端: ${item.stock}</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="markCorrect('${item.itemKey}')" class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center text-xl shadow-md">✅</button>
+                                <button onclick="askCount('${item.itemKey}')" class="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center text-xl shadow-md">❌</button>
+                            </div>
+                        </div>
+                        ${item.userCount !== undefined ? `<div class="mt-2 text-right text-yellow-400 font-bold">實盤: ${item.userCount}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function markCorrect(key) {
+            const item = state.items.find(i => i.itemKey === key);
+            item.userCount = item.stock;
+            renderItems();
+        }
+
+        function askCount(key) {
+            const val = prompt('請輸入實際盤點數量:');
+            if (val !== null) {
+                const item = state.items.find(i => i.itemKey === key);
+                item.userCount = parseInt(val) || 0;
+                renderItems();
+            }
+        }
+
+        async function exportPPF() {
+            const res = await fetch(state.apiUrl, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'getSalesExport', token: state.token })
+            });
+            const data = await res.json();
+            if (!data.ok) return alert('抓取失敗');
+
+            const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`];
+            const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"];
+            const footer1 = ["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"];
+            const footer2 = ["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"];
+
+            const ws = XLSX.utils.aoa_to_sheet([title, headers, ...data.sales, [], footer1, footer2]);
+            ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, `115-${data.month}-OTC_PPF.xlsx`);
+        }
+
+        function showPage(p) {
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+            document.getElementById('page-' + p).classList.add('active');
+        }
+
+        async function syncData() {
+            const res = await fetch(state.apiUrl, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'inventory', token: state.token })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                state.items = data.items;
+                renderItems();
+            }
+        }
+    </script>
+</body>
+</html>
