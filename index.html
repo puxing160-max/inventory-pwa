@@ -1,222 +1,404 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>庫存盤點系統</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <style>
-        .page { display: none; }
-        .page.active { display: block; }
-        body { background-color: #111827; color: white; -webkit-tap-highlight-color: transparent; }
-        .card-green { border-left: 4px solid #10b981; background-color: rgba(16, 185, 129, 0.1); }
-        .card-red   { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
-        .card-none  { border-left: 4px solid #4b5563; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-        .animate-pulse { animation: pulse 2s infinite; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>庫存盤點系統 v2.3</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{--bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;--text:#e8eaf0;--text-muted:#7880a0;--accent:#4f8ef7;--accent-dim:#1e2d4d;--ok:#22c55e;--ok-dim:#0d2d1a;--err:#ef4444;--err-dim:#2d0d0d;}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overscroll-behavior:none;}
+    .mono{font-family:'Space Mono',monospace;}.muted{color:var(--text-muted);}.hidden{display:none!important;}
+    .page{display:none;}.page.active{display:flex;flex-direction:column;min-height:100dvh;}
+    .card-uncounted{background:var(--surface);border:1.5px solid var(--border);}
+    .card-ok{background:var(--ok-dim);border:1.5px solid var(--ok);}
+    .card-err{background:var(--err-dim);border:1.5px solid var(--err);}
+    .card-na{background:var(--surface2);border:1.5px solid var(--border);opacity:0.4;}
+    input,select{background:var(--surface2);border:1.5px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:1rem;outline:none;width:100%;}
+    input:focus,select:focus{border-color:var(--accent);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;font-weight:700;cursor:pointer;border:none;}
+    .btn-primary{background:var(--accent);color:#fff;}.btn-ghost{background:var(--surface2);color:var(--text);border:1.5px solid var(--border);}
+    .btn-danger{background:var(--err);color:#fff;}.btn-ok{background:var(--ok);color:#000;}
+    .progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+    .progress-fill{height:100%;background:var(--accent);transition:width 0.35s ease;}
+    #tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1.5px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:100;}
+    .tab-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px 6px;color:var(--text-muted);font-size:0.65rem;font-weight:700;cursor:pointer;}
+    .tab-item.active{color:var(--accent);}
+    .top-header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1.5px solid var(--border);padding:10px 16px;}
+    .item-card{border-radius:14px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+    .action-icon{width:44px;height:44px;border-radius:12px;font-size:1.2rem;font-weight:900;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--text-muted);flex-shrink:0;}
+    .action-icon.is-ok{background:var(--ok);color:#000;}.action-icon.is-err{background:var(--err);color:#fff;}
+    .count-btn{background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;font-size:1.35rem;font-weight:700;color:var(--text);height:64px;cursor:pointer;}
+    .badge{padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:700;}
+    .badge-ok{background:var(--ok-dim);color:var(--ok);}.badge-err{background:var(--err-dim);color:var(--err);}.badge-new{background:var(--accent-dim);color:var(--accent);}
+    #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 20px;border-radius:999px;font-weight:700;opacity:0;transition:opacity 0.2s;z-index:999;white-space:nowrap;}
+    #toast.show{opacity:1;}
+    #detail-page{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;flex-direction:column;transform:translateY(100%);transition:transform 0.28s ease;}
+    #detail-page.open{display:flex;transform:translateY(0);}
+    .toggle-group{display:flex;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:3px;}
+    .toggle-opt{flex:1;text-align:center;padding:7px 10px;border-radius:8px;font-size:0.8rem;font-weight:700;color:var(--text-muted);cursor:pointer;}
+    .toggle-opt.active{background:var(--accent);color:#fff;}
+  </style>
 </head>
 <body>
-<div id="app" class="pb-24">
+<div id="toast"></div>
 
-    <!-- 盤點分頁 -->
-    <div id="page-inventory" class="page active p-4">
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-xl font-bold text-blue-400">📋 庫存盤點</h1>
-            <button id="btn-sync" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition">↻ 同步雲端</button>
+<!-- 登入頁 -->
+<div id="auth-page">
+  <div class="flex items-center justify-center min-h-screen p-6">
+    <div class="w-full max-w-sm bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl">
+      <div class="mb-6 text-center"><h1 class="text-2xl font-black mb-2">診所庫存系統</h1><p class="text-slate-400 text-sm">請選擇員工並輸入密碼以同步資料</p></div>
+      <div class="space-y-4">
+        <select id="auth-employee"><option value="">選擇員工</option><option>鄒宗諺</option><option>黃巧伶</option><option>陳怡馨</option><option>蕭文憶</option></select>
+        <input type="password" id="auth-password" placeholder="診所密碼" />
+        <button id="login-btn" class="btn btn-primary w-full">登入並同步</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 主程式 -->
+<div id="app-shell" class="hidden">
+  <nav id="tabbar">
+    <div class="tab-item active" data-tab="list">📋<span>盤點</span></div>
+    <div class="tab-item" data-tab="report">📊<span>報表</span></div>
+    <div class="tab-item" data-tab="settings">⚙️<span>設定</span></div>
+  </nav>
+
+  <!-- 盤點頁 -->
+  <div id="page-list" class="page active">
+    <div class="top-header">
+      <div class="flex justify-between items-end mb-3">
+        <div><span class="badge badge-new mb-1 inline-block" id="employee-badge">載入中</span><h1 class="text-xl font-black">庫存盤點</h1></div>
+        <button id="sync-btn" class="btn btn-ghost text-xs px-3 py-1">↻ 同步雲端</button>
+      </div>
+      <div class="progress-bar mb-2"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <p class="text-[10px] muted mb-3" id="progress-text">已完成 0 / 0 項</p>
+      <input type="text" id="search-input" placeholder="🔍 搜尋品項名稱或代碼..." />
+      <div class="toggle-group mt-3">
+        <div class="toggle-opt active" data-mode="route">動線排序</div>
+        <div class="toggle-opt" data-mode="all">全品項</div>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto px-4 pt-4 pb-24" id="item-list"></div>
+  </div>
+
+  <!-- 報表頁 -->
+  <div id="page-report" class="page">
+    <div class="top-header"><h1 class="text-lg font-black">報表匯出</h1></div>
+    <div class="p-4 space-y-4">
+      <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+        <div class="grid grid-cols-3 text-center gap-2">
+          <div><p class="text-2xl font-black mono" id="rpt-total">0</p><p class="text-xs muted">總數</p></div>
+          <div><p class="text-2xl font-black mono text-green-500" id="rpt-ok">0</p><p class="text-xs muted">正確</p></div>
+          <div><p class="text-2xl font-black mono text-red-500" id="rpt-err">0</p><p class="text-xs muted">異常</p></div>
         </div>
-        <div id="inventory-list" class="space-y-3"></div>
+      </div>
+      <div id="anomaly-list" class="space-y-2"></div>
+      <button id="export-count-btn" class="btn btn-primary w-full">⬇ 匯出完整盤點結果 (.xlsx)</button>
+      <button id="export-sales-btn" class="btn btn-ghost w-full">⬇ 匯出當月銷售明細 (.xlsx)</button>
     </div>
+  </div>
 
-    <!-- 報表分頁 -->
-    <div id="page-report" class="page p-4">
-        <h1 class="text-xl font-bold mb-6 text-green-400">📊 報表匯出</h1>
-        <div class="space-y-4">
-            <button id="btn-export" class="w-full py-5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold shadow-lg flex flex-col items-center">
-                <span class="text-lg">生成當月銷售明細</span>
-                <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)</span>
-            </button>
-        </div>
+  <!-- 設定頁 -->
+  <div id="page-settings" class="page">
+    <div class="top-header"><h1 class="text-lg font-black">系統設定</h1></div>
+    <div class="p-4 space-y-4">
+      <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+        <p class="text-sm font-bold mb-2">帳號狀態</p>
+        <p class="text-xs muted mb-4" id="settings-employee">—</p>
+        <button id="logout-btn" class="btn btn-danger w-full">登出帳號</button>
+      </div>
+      <button id="reset-btn" class="btn btn-ghost w-full">🗑 清除本次盤點進度</button>
     </div>
+  </div>
 
-    <!-- 導覽列 -->
-    <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 z-50">
-        <button data-page="inventory" class="nav-btn flex flex-col items-center gap-1 text-gray-400">
-            <span class="text-xl">📋</span><span class="text-xs">盤點</span>
-        </button>
-        <button data-page="report" class="nav-btn flex flex-col items-center gap-1 text-gray-400">
-            <span class="text-xl">📊</span><span class="text-xs">報表</span>
-        </button>
+  <!-- 詳情頁 -->
+  <div id="detail-page">
+    <div class="top-header flex items-center gap-4">
+      <button id="detail-close" class="text-xl">✕</button>
+      <div class="flex-1 truncate"><p class="font-black text-base truncate" id="d-name">品項名稱</p><p class="mono text-[10px] muted" id="d-code">CODE</p></div>
+      <span class="badge" id="d-badge"></span>
     </div>
+    <div class="p-6 space-y-6">
+      <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 flex justify-around">
+        <div class="text-center"><p class="text-xs muted mb-1">雲端庫存</p><p class="text-4xl font-black mono" id="d-stock">0</p></div>
+        <div class="text-center"><p class="text-xs muted mb-1">實盤數量</p><p class="text-4xl font-black mono text-blue-400" id="d-count">0</p></div>
+      </div>
+      <div class="grid grid-cols-4 gap-3">
+        <button class="count-btn" data-add="1">+1</button>
+        <button class="count-btn" data-add="3">+3</button>
+        <button class="count-btn" data-add="5">+5</button>
+        <button class="count-btn" data-add="10">+10</button>
+      </div>
+      <div class="flex gap-2">
+        <input type="number" id="d-manual-input" placeholder="手動輸入總量" />
+        <button id="d-confirm-btn" class="btn btn-ok px-6">確認</button>
+      </div>
+      <input type="text" id="d-note" placeholder="備註 (選填)" />
+      <button id="d-reset-btn" class="btn btn-ghost w-full">重設此項</button>
+    </div>
+  </div>
 </div>
 
 <script>
-// ─── 狀態 ───────────────────────────────────────────────────────────────────
-const state = {
-    apiUrl: 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec',
-    items: [],
-    token: 'default_token'
-};
+/* ── 動線順序 ─────────────────────────────────────────────────── */
+const ROUTE_ORDER = [
+  'IFC海綿組','電療貼片(大)','電療貼片(小)',
+  'S-51人性化加強型護腰 S','S-51人性化加強型護腰 M','S-51人性化加強型護腰 L','S-51人性化加強型護腰 XL','S-51人性化加強型護腰 XXL',
+  'ZS-501 日興護腰 S','ZS-501 日興護腰 M','ZS-501 日興護腰 L','ZS-501 日興護腰 XL',
+  '4074-Rib belt (女)',
+  'S-44加強型護頸M','S-44加強型護頸L',
+  'MHC-515電熱毯(肩)',
+  'H-86 竹炭人性化護肩 M','H-86 竹炭人性化護肩 L','H-86 竹炭人性化護肩 XL',
+  'S-17 矽膠軟墊護肘 FREE','S-41機能型護肘M','S-41機能型護肘L','T-48立體型連指護腕 FREE',
+  'S-26三支架護指 S','S-26三支架護指 M','S-26三支架護指 L',
+  'O-10奈米竹炭(加強型)護腕 FREE',
+  '1289 wrist/tuhmb support S','1289 wrist/tuhmb support M',
+  'S-23左右共用手托板S','S-23左右共用手托板M','S-23左右共用手托板L',
+  'TFCC wrist widget',
+  'H-20專業調整式護踝 FREE',
+  '53100 腕關節夾板','4388 Sliding-Fit wrist brace M(右)',
+  'AIR CAST HEEL S','AIR CAST HEEL M',
+  'S-19膝部反拉加強帶(髕骨帶) FREE',
+  'S-49雙拉式透氣護膝M','S-49雙拉式透氣護膝L','S-49雙拉式透氣護膝XL',
+  'S-45網狀高透氣護膝 S','S-45網狀高透氣護膝 M','S-45網狀高透氣護膝 L','S-45網狀高透氣護膝 XL',
+  'S-20矽膠單側條護膝 FREE',
+  'O-26 竹炭雙側條護膝M','O-26 竹炭雙側條護膝L','O-26 竹炭雙側條護膝XL',
+  'T-35人性化加強型護踝 M','T-35人性化加強型護踝 L',
+  'T-25人性化繃帶型護踝 M','T-25人性化繃帶型護踝 L','T-25人性化繃帶型護踝 XL',
+  'B-4601 6 CM 按摩球',
+  'IFC電極線','IFC吸杯','TENS 電極線','牽引機警報線'
+];
 
-// ─── 初始化 ──────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', function () {
-    // 導覽列
-    document.querySelectorAll('.nav-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            showPage(btn.getAttribute('data-page'));
-        });
-    });
+/* 名稱標準化：去掉多餘空格、統一小寫，解決全/半形差異 */
+function norm(s){ return String(s||'').replace(/\s+/g,' ').trim().toLowerCase(); }
 
-    // 同步按鈕
-    document.getElementById('btn-sync').addEventListener('click', syncData);
+/* ── 狀態 ─────────────────────────────────────────────────────── */
+const API_URL   = 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec';
+const STORE_KEY = 'inv_v2_3';
 
-    // 匯出按鈕
-    document.getElementById('btn-export').addEventListener('click', exportPPF);
+let S = { auth:{token:'',employeeName:''}, items:[], counts:{}, checked:{}, notes:{}, mode:'route', currentKey:null };
 
-    // 盤點清單事件（委派）
-    document.getElementById('inventory-list').addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        var action = btn.getAttribute('data-action');
-        var key    = btn.getAttribute('data-key');
-        if (action === 'correct') markCorrect(key);
-        if (action === 'count')   askCount(key);
-    });
+function loadS(){ try{ var d=localStorage.getItem(STORE_KEY); if(d) S=Object.assign(S,JSON.parse(d)); }catch(e){} }
+function saveS(){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(S)); }catch(e){} }
 
-    syncData();
+/* ── 初始化 ───────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded',function(){
+  loadS();
+  document.getElementById('login-btn').addEventListener('click',login);
+  document.getElementById('auth-password').addEventListener('keydown',function(e){ if(e.key==='Enter') login(); });
+  document.querySelectorAll('.tab-item').forEach(function(b){ b.addEventListener('click',function(){ switchTab(b.getAttribute('data-tab')); }); });
+  document.getElementById('sync-btn').addEventListener('click',syncInventory);
+  document.getElementById('search-input').addEventListener('input',renderList);
+  document.querySelectorAll('.toggle-opt').forEach(function(o){ o.addEventListener('click',function(){ setMode(o.getAttribute('data-mode')); }); });
+  document.getElementById('item-list').addEventListener('click',function(e){ var c=e.target.closest('[data-key]'); if(c) openDetail(c.getAttribute('data-key')); });
+  document.getElementById('detail-close').addEventListener('click',closeDetail);
+  document.querySelectorAll('[data-add]').forEach(function(b){ b.addEventListener('click',function(){ addCount(parseInt(b.getAttribute('data-add'))); }); });
+  document.getElementById('d-confirm-btn').addEventListener('click',setCountManual);
+  document.getElementById('d-note').addEventListener('input',saveNote);
+  document.getElementById('d-reset-btn').addEventListener('click',resetThisItem);
+  document.getElementById('export-count-btn').addEventListener('click',exportCountReport);
+  document.getElementById('export-sales-btn').addEventListener('click',exportSalesReport);
+  document.getElementById('logout-btn').addEventListener('click',logout);
+  document.getElementById('reset-btn').addEventListener('click',resetCount);
+  if(S.auth.token){ showAppShell(); renderAll(); } else { showAuthPage(); }
 });
 
-// ─── 頁面切換 ─────────────────────────────────────────────────────────────────
-function showPage(p) {
-    document.querySelectorAll('.page').forEach(function (el) {
-        el.classList.remove('active');
+/* ── 認證 ─────────────────────────────────────────────────────── */
+function showAuthPage(){ document.getElementById('auth-page').classList.remove('hidden'); document.getElementById('app-shell').classList.add('hidden'); }
+function showAppShell(){
+  document.getElementById('auth-page').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+  document.getElementById('employee-badge').textContent=S.auth.employeeName;
+  document.getElementById('settings-employee').textContent='登入者：'+S.auth.employeeName;
+}
+async function login(){
+  var name=document.getElementById('auth-employee').value;
+  var pass=document.getElementById('auth-password').value;
+  if(!name||!pass){ alert('請填寫完整資訊'); return; }
+  var btn=document.getElementById('login-btn'); btn.textContent='驗證中...';
+  try{
+    var res=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'login',employeeName:name,password:pass})});
+    var data=await res.json();
+    if(data.ok){ S.auth={token:data.token,employeeName:data.employeeName}; saveS(); showAppShell(); syncInventory(); }
+    else alert(data.error||'登入失敗');
+  }catch(e){ alert('網路錯誤：'+e); }
+  finally{ btn.textContent='登入並同步'; }
+}
+function logout(){ if(!confirm('確定登出？')) return; S.auth={token:'',employeeName:''}; saveS(); location.reload(); }
+
+/* ── 同步 ─────────────────────────────────────────────────────── */
+async function syncInventory(){
+  if(!S.auth.token) return;
+  toast('同步雲端資料中...');
+  try{
+    var res=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'inventory',token:S.auth.token})});
+    var data=await res.json();
+    if(data.ok){ S.items=data.items; rebuildChecked(); saveS(); renderAll(); toast('✅ 資料已更新'); }
+    else toast('❌ 同步失敗：'+data.error);
+  }catch(e){ toast('❌ 連線錯誤'); }
+}
+
+/* ── 渲染清單（★ 核心修正：用 norm() 比對名稱）──────────────── */
+function renderList(){
+  var query=norm(document.getElementById('search-input').value);
+
+  /* 建立 正規化名稱 → item 的索引 */
+  var nameMap={};
+  S.items.forEach(function(item){ nameMap[norm(item.name)]=item; });
+
+  var list;
+  if(S.mode==='route'){
+    list=ROUTE_ORDER.map(function(rName){
+      var found=nameMap[norm(rName)];
+      return found || {name:rName,code:'N/A',stock:'-',itemKey:'__NA__'+rName,_na:true};
     });
-    document.getElementById('page-' + p).classList.add('active');
-}
+  } else {
+    list=S.items.slice();
+  }
 
-// ─── 同步雲端 ─────────────────────────────────────────────────────────────────
-async function syncData() {
-    var list = document.getElementById('inventory-list');
-    list.innerHTML = '<div class="p-10 text-center text-gray-400 animate-pulse font-medium">正在連線雲端資料庫...</div>';
-    try {
-        var res  = await fetch(state.apiUrl, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'inventory', token: state.token })
-        });
-        var data = await res.json();
-        if (data.ok) {
-            state.items = data.items;
-            renderItems();
-        } else {
-            list.innerHTML = '<div class="p-10 text-center text-red-400 font-bold">同步失敗：' + (data.error || '未知錯誤') + '</div>';
-        }
-    } catch (e) {
-        list.innerHTML = '<div class="p-10 text-center text-red-400 font-bold">連線錯誤，請檢查網路或 GAS 權限</div>';
+  if(query) list=list.filter(function(i){ return norm(i.name).includes(query)||norm(i.code).includes(query); });
+
+  var html='';
+  list.forEach(function(item){
+    if(item._na){
+      html+='<div class="item-card card-na"><div class="flex-1 min-w-0"><p class="text-xs muted mono mb-1">N/A</p><p class="font-bold text-sm truncate">'+escHtml(item.name)+'</p></div><div class="text-right"><p class="text-xs muted">雲端無此品項</p></div></div>';
+      return;
     }
+    var st=S.checked[item.itemKey]||'uncounted';
+    var cc=st==='ok'?'card-ok':st==='err'?'card-err':'card-uncounted';
+    var cd=S.counts[item.itemKey]!==undefined?S.counts[item.itemKey]:'-';
+    var ic=st==='ok'?'action-icon is-ok':st==='err'?'action-icon is-err':'action-icon';
+    var it=st==='ok'?'✓':st==='err'?'⚠':'';
+    var sk=encodeURIComponent(item.itemKey);
+    html+='<div class="item-card '+cc+'" data-key="'+sk+'"><div class="flex-1 min-w-0"><p class="text-xs muted mono mb-1">'+escHtml(item.code)+'</p><p class="font-bold text-sm truncate">'+escHtml(item.name)+'</p></div><div class="text-right mr-2"><p class="text-xs muted">雲端: '+item.stock+'</p><p class="text-lg font-black mono">'+cd+'</p></div><div class="'+ic+'">'+it+'</div></div>';
+  });
+  document.getElementById('item-list').innerHTML=html||'<p class="text-center muted py-10">沒有符合的品項</p>';
+  updateProgress();
 }
 
-// ─── 渲染清單 ─────────────────────────────────────────────────────────────────
-function renderItems() {
-    var list = document.getElementById('inventory-list');
-    var html = '';
-
-    state.items.forEach(function (item) {
-        var statusClass = 'card-none';
-        if (item.userCount !== undefined) {
-            statusClass = item.userCount === item.stock ? 'card-green' : 'card-red';
-        }
-
-        // 安全地跳脫 key，避免任何特殊字元破壞 HTML 屬性
-        var safeKey = encodeURIComponent(item.itemKey);
-
-        var countRow = '';
-        if (item.userCount !== undefined) {
-            var countColor = item.userCount === item.stock ? 'text-green-400' : 'text-red-400';
-            countRow =
-                '<div class="mt-3 pt-2 border-t border-gray-700 text-right">' +
-                  '<span class="text-xs text-gray-400">實際盤點：</span>' +
-                  '<span class="text-lg font-black ' + countColor + '">' + item.userCount + '</span>' +
-                '</div>';
-        }
-
-        html +=
-            '<div class="p-4 rounded-xl ' + statusClass + ' bg-gray-800 shadow-sm border border-gray-700">' +
-              '<div class="flex justify-between items-center">' +
-                '<div class="flex-1">' +
-                  '<div class="text-[10px] text-gray-500 font-mono">' + escHtml(item.code) + '</div>' +
-                  '<div class="font-bold text-gray-100">' + escHtml(item.name) + '</div>' +
-                  '<div class="text-xs mt-1 inline-block px-2 py-0.5 bg-blue-900 text-blue-200 rounded">雲端庫存: ' + item.stock + '</div>' +
-                '</div>' +
-                '<div class="flex gap-3">' +
-                  '<button data-action="correct" data-key="' + safeKey + '" class="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">✅</button>' +
-                  '<button data-action="count"   data-key="' + safeKey + '" class="w-12 h-12 bg-red-600   rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">❌</button>' +
-                '</div>' +
-              '</div>' +
-              countRow +
-            '</div>';
-    });
-
-    list.innerHTML = html || '<div class="p-10 text-center text-gray-500">沒有資料</div>';
+/* ── 詳情頁 ───────────────────────────────────────────────────── */
+function openDetail(sk){
+  var key=decodeURIComponent(sk);
+  var item=S.items.find(function(i){ return i.itemKey===key; });
+  if(!item) return;
+  S.currentKey=key;
+  document.getElementById('d-name').textContent=item.name;
+  document.getElementById('d-code').textContent=item.code;
+  document.getElementById('d-stock').textContent=item.stock;
+  document.getElementById('d-count').textContent=S.counts[key]!==undefined?S.counts[key]:0;
+  document.getElementById('d-note').value=S.notes[key]||'';
+  document.getElementById('d-manual-input').value='';
+  refreshBadge();
+  var page=document.getElementById('detail-page');
+  page.style.display='flex';
+  requestAnimationFrame(function(){ page.classList.add('open'); });
 }
+function closeDetail(){
+  var page=document.getElementById('detail-page');
+  page.classList.remove('open');
+  setTimeout(function(){ page.style.display='none'; renderList(); },300);
+}
+function addCount(v){ if(!S.currentKey) return; S.counts[S.currentKey]=(S.counts[S.currentKey]||0)+v; syncCount(); }
+function setCountManual(){ var v=parseInt(document.getElementById('d-manual-input').value,10); if(isNaN(v)) return; S.counts[S.currentKey]=v; document.getElementById('d-manual-input').value=''; syncCount(); }
+function syncCount(){
+  var key=S.currentKey, cnt=S.counts[key];
+  document.getElementById('d-count').textContent=cnt;
+  var item=S.items.find(function(i){ return i.itemKey===key; });
+  if(item) S.checked[key]=(cnt===item.stock)?'ok':'err';
+  refreshBadge(); saveS();
+}
+function refreshBadge(){
+  var st=S.checked[S.currentKey];
+  var b=document.getElementById('d-badge');
+  b.textContent=st==='ok'?'✅ 正確':st==='err'?'⚠ 異常':'未盤點';
+  b.className='badge '+(st==='ok'?'badge-ok':st==='err'?'badge-err':'badge-new');
+}
+function saveNote(){ if(!S.currentKey) return; S.notes[S.currentKey]=document.getElementById('d-note').value; saveS(); }
+function resetThisItem(){ if(!S.currentKey) return; S.counts[S.currentKey]=0; delete S.checked[S.currentKey]; document.getElementById('d-count').textContent=0; refreshBadge(); saveS(); }
 
-// ─── 盤點操作 ─────────────────────────────────────────────────────────────────
-function markCorrect(encodedKey) {
-    var key  = decodeURIComponent(encodedKey);
-    var item = state.items.find(function (i) { return i.itemKey === key; });
-    if (item) {
-        item.userCount = item.stock;
-        renderItems();
+/* ── 報表頁 ───────────────────────────────────────────────────── */
+function renderReport(){
+  var ok=0,err=0,html='';
+  S.items.forEach(function(item){
+    var st=S.checked[item.itemKey];
+    if(st==='ok') ok++;
+    if(st==='err'){
+      err++;
+      var cnt=S.counts[item.itemKey]!==undefined?S.counts[item.itemKey]:'未盤';
+      var diff=typeof cnt==='number'?(cnt-item.stock):'-';
+      var ds=typeof diff==='number'?(diff>0?'+'+diff:String(diff)):diff;
+      html+='<div class="bg-red-950 border border-red-800 rounded-xl p-3 text-sm"><p class="font-bold">'+escHtml(item.name)+'</p><p class="text-xs muted">雲端: '+item.stock+'　實盤: '+cnt+'　差異: '+ds+'</p></div>';
     }
+  });
+  document.getElementById('rpt-total').textContent=S.items.length;
+  document.getElementById('rpt-ok').textContent=ok;
+  document.getElementById('rpt-err').textContent=err;
+  document.getElementById('anomaly-list').innerHTML=html||'<p class="text-xs muted text-center">無異常品項</p>';
 }
 
-function askCount(encodedKey) {
-    var val = prompt('請輸入實際盤點數量：');
-    if (val === null || val === '') return;
-    var key  = decodeURIComponent(encodedKey);
-    var item = state.items.find(function (i) { return i.itemKey === key; });
-    if (item) {
-        item.userCount = parseInt(val, 10) || 0;
-        renderItems();
-    }
+function exportCountReport(){
+  var rows=S.items.map(function(i){
+    return {代碼:i.code,名稱:i.name,雲端庫存:i.stock,實盤數量:S.counts[i.itemKey]!==undefined?S.counts[i.itemKey]:'',差異:S.counts[i.itemKey]!==undefined?S.counts[i.itemKey]-i.stock:'',備註:S.notes[i.itemKey]||''};
+  });
+  var ws=XLSX.utils.json_to_sheet(rows);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'盤點結果');
+  XLSX.writeFile(wb,'盤點報表_'+new Date().toLocaleDateString('zh-TW')+'.xlsx');
 }
 
-// ─── 匯出 PPF ────────────────────────────────────────────────────────────────
-async function exportPPF() {
-    try {
-        var res  = await fetch(state.apiUrl, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'getSalesExport', token: state.token })
-        });
-        var data = await res.json();
-        if (!data.ok) { alert('抓取資料失敗：' + data.error); return; }
-
-        var headerRow  = [data.year + '年 ' + data.month + ' 月 銷售記錄'];
-        var columnRow  = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '備註'];
-        var summaryRow = ['總金額', data.summary.total, 'PPF', data.summary.ppf];
-
-        var ws = XLSX.utils.aoa_to_sheet(
-            [headerRow, columnRow].concat(data.sales).concat([[]], [summaryRow])
-        );
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-
-        var wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '銷售明細');
-        XLSX.writeFile(wb, '銷售報表.xlsx');
-    } catch (e) {
-        alert('匯出失敗：' + e);
-    }
+async function exportSalesReport(){
+  toast('正在抓取銷售資料...');
+  try{
+    var res=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'getSalesExport',token:S.auth.token})});
+    var data=await res.json();
+    if(!data.ok){ alert('抓取失敗：'+data.error); return; }
+    var aoa=[[data.year+'年 '+data.month+' 月 銷售記錄'],['日期','姓名','類別','品項','定價','數量','折扣','售價','備註']].concat(data.sales).concat([[],['總金額',data.summary.total,'PPF',data.summary.ppf]]);
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'銷售明細');
+    XLSX.writeFile(wb,'銷售報表.xlsx');
+    toast('✅ 匯出完成');
+  }catch(e){ alert('匯出失敗：'+e); }
 }
 
-// ─── 工具函式 ─────────────────────────────────────────────────────────────────
-function escHtml(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+/* ── 工具 ─────────────────────────────────────────────────────── */
+function switchTab(tab){
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.tab-item').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById('page-'+tab).classList.add('active');
+  document.querySelector('[data-tab="'+tab+'"]').classList.add('active');
+  if(tab==='report') renderReport();
 }
+function setMode(m){
+  S.mode=m;
+  document.querySelectorAll('.toggle-opt').forEach(function(o){ o.classList.toggle('active',o.getAttribute('data-mode')===m); });
+  renderList();
+}
+function updateProgress(){
+  var total=ROUTE_ORDER.length, done=Object.keys(S.checked).length;
+  document.getElementById('progress-fill').style.width=(total?Math.round(done/total*100):0)+'%';
+  document.getElementById('progress-text').textContent='已完成 '+done+' / '+total+' 項';
+}
+function rebuildChecked(){
+  Object.keys(S.counts).forEach(function(key){
+    var item=S.items.find(function(i){ return i.itemKey===key; });
+    if(item) S.checked[key]=(S.counts[key]===item.stock)?'ok':'err';
+  });
+}
+function resetCount(){ if(!confirm('清除所有盤點進度？')) return; S.counts={}; S.checked={}; S.notes={}; saveS(); renderAll(); }
+function renderAll(){ renderList(); }
+function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); },2200); }
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 </script>
 </body>
 </html>
