@@ -13,15 +13,19 @@
         .card-green { border-left: 4px solid #10b981; background-color: rgba(16, 185, 129, 0.1); }
         .card-red { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
         .card-none { border-left: 4px solid #4b5563; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
 <body>
-    <div id="app">
+    <div id="app" class="pb-20">
         <!-- 盤點分頁 -->
         <div id="page-inventory" class="page active p-4">
             <div class="flex justify-between items-center mb-4">
-                <h1 class="text-xl font-bold">庫存盤點</h1>
-                <button onclick="syncData()" class="px-3 py-1 bg-gray-700 rounded-full text-sm">↻ 同步雲端</button>
+                <h1 class="text-xl font-bold text-blue-400">📋 庫存盤點</h1>
+                <button onclick="syncData()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm font-medium transition">
+                    ↻ 同步雲端
+                </button>
             </div>
             <div id="inventory-list" class="space-y-3">
                 <!-- 項目由 JS 動態渲染 -->
@@ -30,34 +34,53 @@
 
         <!-- 報表分頁 -->
         <div id="page-report" class="page p-4">
-            <h1 class="text-xl font-bold mb-6">報表匯出</h1>
+            <h1 class="text-xl font-bold mb-6 text-green-400">📊 報表匯出</h1>
             <div class="space-y-4">
-                <button onclick="exportPPF()" class="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg">
-                    📊 生成當月銷售明細 (PPF 格式)
+                <button onclick="exportPPF()" class="w-full py-5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold shadow-lg flex flex-col items-center">
+                    <span class="text-lg">生成當月銷售明細</span>
+                    <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)</span>
                 </button>
-                <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg">
+                
+                <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-md">
                     ⬇ 匯出本次盤點結果 (.xlsx)
                 </button>
             </div>
         </div>
 
-        <!-- 導覽列 -->
-        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-3">
-            <button onclick="showPage('inventory')" class="text-gray-400 focus:text-blue-400">📋 盤點</button>
-            <button onclick="showPage('report')" class="text-gray-400 focus:text-blue-400">📊 報表</button>
+        <!-- 底部導覽列 -->
+        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 shadow-2xl">
+            <button onclick="showPage('inventory')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-blue-400 transition">
+                <span class="text-xl">📋</span>
+                <span class="text-xs">盤點</span>
+            </button>
+            <button onclick="showPage('report')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-green-400 transition">
+                <span class="text-xl">📊</span>
+                <span class="text-xs">報表</span>
+            </button>
         </div>
     </div>
 
     <script>
         let state = {
-            apiUrl: 'https://script.google.com/macros/s/AKfycbzlP0T9b0wOPnEw8fL4LbHP9Y7OL3k-l7Wkv9084HC0G3BaI_WubfRodKxUTp2gWn6yxg/exec', // 請填入你的 GAS 網址
+            // 已經填入你最新的 GAS 網址[cite: 4]
+            apiUrl: 'https://script.google.com/macros/s/AKfycbzlP0T9b0wOPnEw8fL4LbHP9Y7OL3k-l7Wkv9084HC0G3BaI_WubfRodKxUTp2gWn6yxg/exec', 
             items: [],
-            token: localStorage.getItem('token')
+            token: localStorage.getItem('token') || 'default_token'
         };
 
-        // 渲染清單：恢復一鍵打勾/叉叉模式
+        // --- 初始化：網頁載入後自動同步 ---
+        window.onload = function() {
+            syncData();
+        };
+
+        // --- 核心邏輯：渲染清單 (一鍵打勾/叉叉模式) ---
         function renderItems() {
             const list = document.getElementById('inventory-list');
+            if (state.items.length === 0) {
+                list.innerHTML = '<div class="p-10 text-center text-gray-500">目前沒有盤點資料</div>';
+                return;
+            }
+
             list.innerHTML = state.items.map(item => {
                 let statusClass = 'card-none';
                 if (item.userCount !== undefined) {
@@ -65,22 +88,51 @@
                 }
 
                 return `
-                    <div class="p-4 rounded-lg ${statusClass} bg-gray-800">
+                    <div class="p-4 rounded-xl ${statusClass} bg-gray-800 shadow-sm border border-gray-700">
                         <div class="flex justify-between items-center">
-                            <div>
-                                <div class="text-xs text-gray-500">${item.code}</div>
-                                <div class="font-bold">${item.name}</div>
-                                <div class="text-xs text-blue-400">雲端: ${item.stock}</div>
+                            <div class="flex-1">
+                                <div class="text-[10px] text-gray-500 font-mono">${item.code}</div>
+                                <div class="font-bold text-gray-100">${item.name}</div>
+                                <div class="text-xs mt-1 inline-block px-2 py-0.5 bg-blue-900 text-blue-200 rounded">雲端庫存: ${item.stock}</div>
                             </div>
-                            <div class="flex gap-2">
-                                <button onclick="markCorrect('${item.itemKey}')" class="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center text-xl shadow-md">✅</button>
-                                <button onclick="askCount('${item.itemKey}')" class="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center text-xl shadow-md">❌</button>
+                            <div class="flex gap-3">
+                                <button onclick="markCorrect('${item.itemKey}')" 
+                                        class="w-12 h-12 bg-green-600 hover:bg-green-500 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">✅</button>
+                                <button onclick="askCount('${item.itemKey}')" 
+                                        class="w-12 h-12 bg-red-600 hover:bg-red-500 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">❌</button>
                             </div>
                         </div>
-                        ${item.userCount !== undefined ? `<div class="mt-2 text-right text-yellow-400 font-bold">實盤: ${item.userCount}</div>` : ''}
+                        ${item.userCount !== undefined ? `
+                            <div class="mt-3 pt-2 border-t border-gray-700 text-right">
+                                <span class="text-xs text-gray-400">實際盤點：</span>
+                                <span class="text-lg font-black ${item.userCount === item.stock ? 'text-green-400' : 'text-red-400'}">${item.userCount}</span>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }).join('');
+        }
+
+        // --- 動作：同步資料 ---
+        async function syncData() {
+            const list = document.getElementById('inventory-list');
+            list.innerHTML = '<div class="p-10 text-center text-gray-400 animate-pulse font-medium">正在連線雲端資料庫...</div>';
+            
+            try {
+                const res = await fetch(state.apiUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'inventory', token: state.token })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    state.items = data.items;
+                    renderItems();
+                } else {
+                    list.innerHTML = `<div class="p-10 text-center text-red-400">同步失敗：${data.error}</div>`;
+                }
+            } catch (e) {
+                list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">連線錯誤<br><span class="text-xs font-normal text-gray-500">請確認 GAS 權限已設為「所有人」</span></div>`;
+            }
         }
 
         function markCorrect(key) {
@@ -90,63 +142,51 @@
         }
 
         function askCount(key) {
-            const val = prompt('請輸入實際盤點數量:');
-            if (val !== null) {
+            const val = prompt('請輸入實際盤點數量：');
+            if (val !== null && val !== "") {
                 const item = state.items.find(i => i.itemKey === key);
                 item.userCount = parseInt(val) || 0;
                 renderItems();
             }
         }
 
+        // --- 動作：銷售報表匯出 (PPF 格式) ---
         async function exportPPF() {
-            const res = await fetch(state.apiUrl, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'getSalesExport', token: state.token })
-            });
-            const data = await res.json();
-            if (!data.ok) return alert('抓取失敗');
+            try {
+                const res = await fetch(state.apiUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'getSalesExport', token: state.token })
+                });
+                const data = await res.json();
+                if (!data.ok) return alert('抓取資料失敗：' + data.error);
 
-            const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`];
-            const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"];
-            const footer1 = ["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"];
-            const footer2 = ["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"];
+                const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`[cite: 1]];
+                const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"[cite: 1]];
+                const footer1 = ["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"[cite: 1]];
+                const footer2 = ["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"[cite: 1]];
 
-            const ws = XLSX.utils.aoa_to_sheet([title, headers, ...data.sales, [], footer1, footer2]);
-            ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-            XLSX.writeFile(wb, `115-${data.month}-OTC_PPF.xlsx`);
+                const ws = XLSX.utils.aoa_to_sheet([title, headers, ...data.sales, [], footer1, footer2]);
+                ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }]; // 合併標題列
+                
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "銷售明細");
+                XLSX.writeFile(wb, `115-${data.month}-OTC_銷售報表.xlsx`);
+            } catch (e) {
+                alert('匯出發生錯誤：' + e.message);
+            }
+        }
+
+        function exportInventoryReport() {
+            alert('盤點差異報表功能開發中，請先使用銷售明細匯出。');
         }
 
         function showPage(p) {
             document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
             document.getElementById('page-' + p).classList.add('active');
+            
+            // 切換按鈕顏色效果
+            document.querySelectorAll('nav button').forEach(btn => btn.classList.replace('text-blue-400', 'text-gray-400'));
         }
-
-        async function syncData() {
-            const res = await fetch(state.apiUrl, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'inventory', token: state.token })
-            });
-            const data = await res.json();
-            if (data.ok) {
-                state.items = data.items;
-                renderItems();
-            }
-        }
-        // --- 在 script 標籤結束前加上這段 ---
-
-// 網頁載入完成後自動執行同步
-window.onload = function() {
-    // 檢查是否有儲存過的 token (如果你有實作登入功能)
-    // 如果暫時沒有強迫登入，就直接執行同步
-    syncData(); 
-};
-
-// 補上匯出盤點報表的空函式，避免點擊按鈕報錯
-function exportInventoryReport() {
-    alert('盤點報表匯出功能開發中，請先使用銷售明細匯出。');
-}
     </script>
 </body>
 </html>
