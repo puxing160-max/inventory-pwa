@@ -134,6 +134,19 @@
                 renderItems();
             }
         }
+        // --- 在 script 標籤結束前加上這段 ---
+
+// 網頁載入完成後自動執行同步
+window.onload = function() {
+    // 檢查是否有儲存過的 token (如果你有實作登入功能)
+    // 如果暫時沒有強迫登入，就直接執行同步
+    syncData(); 
+};
+
+// 補上匯出盤點報表的空函式，避免點擊按鈕報錯
+function exportInventoryReport() {
+    alert('盤點報表匯出功能開發中，請先使用銷售明細匯出。');
+}
     </script>
 </body>
 </html>
