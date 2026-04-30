@@ -11,153 +11,212 @@
         .page.active { display: block; }
         body { background-color: #111827; color: white; -webkit-tap-highlight-color: transparent; }
         .card-green { border-left: 4px solid #10b981; background-color: rgba(16, 185, 129, 0.1); }
-        .card-red { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
-        .card-none { border-left: 4px solid #4b5563; }
-        .animate-pulse { animation: pulse 2s infinite; }
+        .card-red   { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
+        .card-none  { border-left: 4px solid #4b5563; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .animate-pulse { animation: pulse 2s infinite; }
     </style>
 </head>
 <body>
-    <div id="app" class="pb-24">
-        <!-- 盤點分頁 -->
-        <div id="page-inventory" class="page active p-4">
-            <div class="flex justify-between items-center mb-4">
-                <h1 class="text-xl font-bold text-blue-400">📋 庫存盤點</h1>
-                <button onclick="syncData()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition">↻ 同步雲端</button>
-            </div>
-            <div id="inventory-list" class="space-y-3"></div>
-        </div>
+<div id="app" class="pb-24">
 
-        <!-- 報表分頁 -->
-        <div id="page-report" class="page p-4">
-            <h1 class="text-xl font-bold mb-6 text-green-400">📊 報表匯出</h1>
-            <div class="space-y-4">
-                <button onclick="exportPPF()" class="w-full py-5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold shadow-lg flex flex-col items-center">
-                    <span class="text-lg">生成當月銷售明細</span>
-                    <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)</span>
-                </button>
-            </div>
+    <!-- 盤點分頁 -->
+    <div id="page-inventory" class="page active p-4">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-xl font-bold text-blue-400">📋 庫存盤點</h1>
+            <button id="btn-sync" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition">↻ 同步雲端</button>
         </div>
+        <div id="inventory-list" class="space-y-3"></div>
+    </div>
 
-        <!-- 導覽列 -->
-        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 z-50">
-            <button onclick="showPage('inventory')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-blue-400">
-                <span class="text-xl">📋</span><span class="text-xs">盤點</span>
-            </button>
-            <button onclick="showPage('report')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-green-400">
-                <span class="text-xl">📊</span><span class="text-xs">報表</span>
+    <!-- 報表分頁 -->
+    <div id="page-report" class="page p-4">
+        <h1 class="text-xl font-bold mb-6 text-green-400">📊 報表匯出</h1>
+        <div class="space-y-4">
+            <button id="btn-export" class="w-full py-5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold shadow-lg flex flex-col items-center">
+                <span class="text-lg">生成當月銷售明細</span>
+                <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)</span>
             </button>
         </div>
     </div>
 
-    <script>
-        const state = {
-            apiUrl: 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec',
-            items: [],
-            token: 'default_token'
-        };
+    <!-- 導覽列 -->
+    <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 z-50">
+        <button data-page="inventory" class="nav-btn flex flex-col items-center gap-1 text-gray-400">
+            <span class="text-xl">📋</span><span class="text-xs">盤點</span>
+        </button>
+        <button data-page="report" class="nav-btn flex flex-col items-center gap-1 text-gray-400">
+            <span class="text-xl">📊</span><span class="text-xs">報表</span>
+        </button>
+    </div>
+</div>
 
-        window.onload = syncData;
+<script>
+// ─── 狀態 ───────────────────────────────────────────────────────────────────
+const state = {
+    apiUrl: 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec',
+    items: [],
+    token: 'default_token'
+};
 
-        async function syncData() {
-            const list = document.getElementById('inventory-list');
-            list.innerHTML = '<div class="p-10 text-center text-gray-400 animate-pulse font-medium">正在連線雲端資料庫...</div>';
-            try {
-                const res = await fetch(state.apiUrl, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'inventory', token: state.token })
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    state.items = data.items;
-                    renderItems();
-                } else {
-                    list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">同步失敗：${data.error}</div>`;
-                }
-            } catch (e) {
-                list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">連線錯誤，請檢查網路或 GAS 權限</div>`;
-            }
+// ─── 初始化 ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function () {
+    // 導覽列
+    document.querySelectorAll('.nav-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            showPage(btn.getAttribute('data-page'));
+        });
+    });
+
+    // 同步按鈕
+    document.getElementById('btn-sync').addEventListener('click', syncData);
+
+    // 匯出按鈕
+    document.getElementById('btn-export').addEventListener('click', exportPPF);
+
+    // 盤點清單事件（委派）
+    document.getElementById('inventory-list').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        var action = btn.getAttribute('data-action');
+        var key    = btn.getAttribute('data-key');
+        if (action === 'correct') markCorrect(key);
+        if (action === 'count')   askCount(key);
+    });
+
+    syncData();
+});
+
+// ─── 頁面切換 ─────────────────────────────────────────────────────────────────
+function showPage(p) {
+    document.querySelectorAll('.page').forEach(function (el) {
+        el.classList.remove('active');
+    });
+    document.getElementById('page-' + p).classList.add('active');
+}
+
+// ─── 同步雲端 ─────────────────────────────────────────────────────────────────
+async function syncData() {
+    var list = document.getElementById('inventory-list');
+    list.innerHTML = '<div class="p-10 text-center text-gray-400 animate-pulse font-medium">正在連線雲端資料庫...</div>';
+    try {
+        var res  = await fetch(state.apiUrl, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'inventory', token: state.token })
+        });
+        var data = await res.json();
+        if (data.ok) {
+            state.items = data.items;
+            renderItems();
+        } else {
+            list.innerHTML = '<div class="p-10 text-center text-red-400 font-bold">同步失敗：' + (data.error || '未知錯誤') + '</div>';
+        }
+    } catch (e) {
+        list.innerHTML = '<div class="p-10 text-center text-red-400 font-bold">連線錯誤，請檢查網路或 GAS 權限</div>';
+    }
+}
+
+// ─── 渲染清單 ─────────────────────────────────────────────────────────────────
+function renderItems() {
+    var list = document.getElementById('inventory-list');
+    var html = '';
+
+    state.items.forEach(function (item) {
+        var statusClass = 'card-none';
+        if (item.userCount !== undefined) {
+            statusClass = item.userCount === item.stock ? 'card-green' : 'card-red';
         }
 
-        function renderItems() {
-            const list = document.getElementById('inventory-list');
-            list.innerHTML = state.items.map(item => {
-                let statusClass = 'card-none';
-                if (item.userCount !== undefined) {
-                    statusClass = item.userCount === item.stock ? 'card-green' : 'card-red';
-                }
-                return `
-                    <div class="p-4 rounded-xl ${statusClass} bg-gray-800 shadow-sm border border-gray-700">
-                        <div class="flex justify-between items-center">
-                            <div class="flex-1">
-                                <div class="text-[10px] text-gray-500 font-mono">${item.code}</div>
-                                <div class="font-bold text-gray-100">${item.name}</div>
-                                <div class="text-xs mt-1 inline-block px-2 py-0.5 bg-blue-900 text-blue-200 rounded">雲端庫存: ${item.stock}</div>
-                            </div>
-                            <div class="flex gap-3">
-                                <button onclick="markCorrect('${item.itemKey}')" class="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">✅</button>
-                                <button onclick="askCount('${item.itemKey}')" class="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">❌</button>
-                            </div>
-                        </div>
-                        ${item.userCount !== undefined ? `
-                            <div class="mt-3 pt-2 border-t border-gray-700 text-right">
-                                <span class="text-xs text-gray-400">實際盤點：</span>
-                                <span class="text-lg font-black ${item.userCount === item.stock ? 'text-green-400' : 'text-red-400'}">${item.userCount}</span>
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('');
+        // 安全地跳脫 key，避免任何特殊字元破壞 HTML 屬性
+        var safeKey = encodeURIComponent(item.itemKey);
+
+        var countRow = '';
+        if (item.userCount !== undefined) {
+            var countColor = item.userCount === item.stock ? 'text-green-400' : 'text-red-400';
+            countRow =
+                '<div class="mt-3 pt-2 border-t border-gray-700 text-right">' +
+                  '<span class="text-xs text-gray-400">實際盤點：</span>' +
+                  '<span class="text-lg font-black ' + countColor + '">' + item.userCount + '</span>' +
+                '</div>';
         }
 
-        function markCorrect(key) {
-            const item = state.items.find(i => i.itemKey === key);
-            if (item) {
-                item.userCount = item.stock;
-                renderItems();
-            }
-        }
+        html +=
+            '<div class="p-4 rounded-xl ' + statusClass + ' bg-gray-800 shadow-sm border border-gray-700">' +
+              '<div class="flex justify-between items-center">' +
+                '<div class="flex-1">' +
+                  '<div class="text-[10px] text-gray-500 font-mono">' + escHtml(item.code) + '</div>' +
+                  '<div class="font-bold text-gray-100">' + escHtml(item.name) + '</div>' +
+                  '<div class="text-xs mt-1 inline-block px-2 py-0.5 bg-blue-900 text-blue-200 rounded">雲端庫存: ' + item.stock + '</div>' +
+                '</div>' +
+                '<div class="flex gap-3">' +
+                  '<button data-action="correct" data-key="' + safeKey + '" class="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">✅</button>' +
+                  '<button data-action="count"   data-key="' + safeKey + '" class="w-12 h-12 bg-red-600   rounded-xl flex items-center justify-center text-xl shadow-lg active:scale-95 transition">❌</button>' +
+                '</div>' +
+              '</div>' +
+              countRow +
+            '</div>';
+    });
 
-        function askCount(key) {
-            const val = prompt('請輸入實際盤點數量：');
-            if (val !== null && val !== "") {
-                const item = state.items.find(i => i.itemKey === key);
-                if (item) {
-                    item.userCount = parseInt(val) || 0;
-                    renderItems();
-                }
-            }
-        }
+    list.innerHTML = html || '<div class="p-10 text-center text-gray-500">沒有資料</div>';
+}
 
-        async function exportPPF() {
-            try {
-                const res = await fetch(state.apiUrl, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'getSalesExport', token: state.token })
-                });
-                const data = await res.json();
-                if (!data.ok) return alert('抓取資料失敗：' + data.error);
+// ─── 盤點操作 ─────────────────────────────────────────────────────────────────
+function markCorrect(encodedKey) {
+    var key  = decodeURIComponent(encodedKey);
+    var item = state.items.find(function (i) { return i.itemKey === key; });
+    if (item) {
+        item.userCount = item.stock;
+        renderItems();
+    }
+}
 
-                const ws = XLSX.utils.aoa_to_sheet([
-                    [`${data.year}年 ${data.month} 月 銷售記錄`],
-                    ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"],
-                    ...data.sales,
-                    [],
-                    ["總金額", data.summary.total, "PPF", data.summary.ppf]
-                ]);
-                ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "銷售明細");
-                XLSX.writeFile(wb, `銷售報表.xlsx`);
-            } catch (e) {
-                alert('匯出失敗');
-            }
-        }
+function askCount(encodedKey) {
+    var val = prompt('請輸入實際盤點數量：');
+    if (val === null || val === '') return;
+    var key  = decodeURIComponent(encodedKey);
+    var item = state.items.find(function (i) { return i.itemKey === key; });
+    if (item) {
+        item.userCount = parseInt(val, 10) || 0;
+        renderItems();
+    }
+}
 
-        function showPage(p) {
-            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-            document.getElementById('page-' + p).classList.add('active');
-        }
-    </script>
+// ─── 匯出 PPF ────────────────────────────────────────────────────────────────
+async function exportPPF() {
+    try {
+        var res  = await fetch(state.apiUrl, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getSalesExport', token: state.token })
+        });
+        var data = await res.json();
+        if (!data.ok) { alert('抓取資料失敗：' + data.error); return; }
+
+        var headerRow  = [data.year + '年 ' + data.month + ' 月 銷售記錄'];
+        var columnRow  = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '備註'];
+        var summaryRow = ['總金額', data.summary.total, 'PPF', data.summary.ppf];
+
+        var ws = XLSX.utils.aoa_to_sheet(
+            [headerRow, columnRow].concat(data.sales).concat([[]], [summaryRow])
+        );
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '銷售明細');
+        XLSX.writeFile(wb, '銷售報表.xlsx');
+    } catch (e) {
+        alert('匯出失敗：' + e);
+    }
+}
+
+// ─── 工具函式 ─────────────────────────────────────────────────────────────────
+function escHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+</script>
 </body>
 </html>
