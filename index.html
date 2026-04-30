@@ -182,7 +182,7 @@ const ROUTE_ORDER = [
 function norm(s){ return String(s||'').replace(/\s+/g,' ').trim().toLowerCase(); }
 
 /* ── 狀態 ─────────────────────────────────────────────────────── */
-const API_URL   = 'https://script.google.com/macros/s/AKfycbwi6HoxEDWt-JQECDdn60Tpia4X7HNJNzQQc5BYDIzkuWb6V7ymn2w6_SkY4LrRmpoQYw/exec';
+const API_URL   = 'https://script.google.com/macros/s/AKfycbx9YGD-Y8wRXa8QMebS7i8cSgwAZDfzvslzJrNYNLSqnxNjUZk0fo-ofnaDD5sfToHQog/exec';
 const STORE_KEY = 'inv_v2_3';
 
 let S = { auth:{token:'',employeeName:''}, items:[], counts:{}, checked:{}, notes:{}, mode:'route', currentKey:null };
@@ -361,12 +361,43 @@ async function exportSalesReport(){
     var res=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'getSalesExport',token:S.auth.token})});
     var data=await res.json();
     if(!data.ok){ alert('抓取失敗：'+data.error); return; }
-    var aoa=[[data.year+'年 '+data.month+' 月 銷售記錄'],['日期','姓名','類別','品項','定價','數量','折扣','售價','備註']].concat(data.sales).concat([[],['總金額',data.summary.total,'PPF',data.summary.ppf]]);
+
+    // GAS 已用 getDisplayValues() 回傳 "4月1日" 格式字串，直接使用
+    var rows=data.sales.map(function(r){
+      return [r[0]||'',r[1]||'',r[2]||'',r[3]||'',r[4]||'',r[5]||'',r[6]||'',r[7]||'',r[8]||''];
+    });
+
+    var total=data.summary.total;
+    var ppf=data.summary.ppf;
+    var realAmount=data.summary.realAmount||total-ppf;
+
+    // 標題格式：115年  4 月 復健科OTC銷售記錄
+    var title=data.year+'年  '+data.month+' 月 復健科OTC銷售記錄 ';
+    var header=['日期','姓名','類別','品項','定價','數量','折扣','售價','備註'];
+
+    // 空白列填滿至至少36行，與原始格式對齊
+    var blankCount=Math.max(0,36-rows.length);
+    var blanks=[];
+    for(var i=0;i<blankCount;i++) blanks.push(['','','','','','','','','']);
+
+    var aoa=[
+      [title,'','','','','','','',''],
+      header
+    ].concat(rows).concat(blanks).concat([
+      ['','','','','','','','',''],
+      ['總金額',total,'PPF',ppf,'審核','','','',''],
+      ['實收金額',realAmount,'備註','ppf已繳入復健科公費','製表','','','','']
+    ]);
+
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}}];
+    ws['!cols']=[
+      {wch:10},{wch:8},{wch:8},{wch:26},{wch:8},{wch:5},{wch:6},{wch:8},{wch:20}
+    ];
+
     var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'銷售明細');
-    XLSX.writeFile(wb,'銷售報表.xlsx');
+    XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+    XLSX.writeFile(wb,data.year+'-'+data.month+'-OTC_PPF.xlsx');
     toast('✅ 匯出完成');
   }catch(e){ alert('匯出失敗：'+e); }
 }
