@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>庫存盤點系統 v2.6</title>
+    <title>庫存盤點系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
@@ -13,7 +13,7 @@
         .card-green { border-left: 4px solid #10b981; background-color: rgba(16, 185, 129, 0.1); }
         .card-red { border-left: 4px solid #ef4444; background-color: rgba(239, 68, 68, 0.1); }
         .card-none { border-left: 4px solid #4b5563; }
-        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
@@ -23,13 +23,9 @@
         <div id="page-inventory" class="page active p-4">
             <div class="flex justify-between items-center mb-4">
                 <h1 class="text-xl font-bold text-blue-400">📋 庫存盤點</h1>
-                <button onclick="syncData()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm font-medium transition">
-                    ↻ 同步雲端
-                </button>
+                <button onclick="syncData()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-full text-sm transition">↻ 同步雲端</button>
             </div>
-            <div id="inventory-list" class="space-y-3">
-                <!-- 項目由 JS 動態渲染 -->
-            </div>
+            <div id="inventory-list" class="space-y-3"></div>
         </div>
 
         <!-- 報表分頁 -->
@@ -38,44 +34,34 @@
             <div class="space-y-4">
                 <button onclick="exportPPF()" class="w-full py-5 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold shadow-lg flex flex-col items-center">
                     <span class="text-lg">生成當月銷售明細</span>
-                    <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)[cite: 1]</span>
-                </button>
-                <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-md">
-                    ⬇ 匯出本次盤點結果 (.xlsx)
+                    <span class="text-xs opacity-80">(符合 115-4-OTC PPF_2 格式)</span>
                 </button>
             </div>
         </div>
 
-        <!-- 底部導覽列 -->
-        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 shadow-2xl z-50">
+        <!-- 導覽列 -->
+        <div class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-4 z-50">
             <button onclick="showPage('inventory')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-blue-400">
-                <span class="text-xl">📋</span>
-                <span class="text-xs">盤點</span>
+                <span class="text-xl">📋</span><span class="text-xs">盤點</span>
             </button>
             <button onclick="showPage('report')" class="flex flex-col items-center gap-1 text-gray-400 focus:text-green-400">
-                <span class="text-xl">📊</span>
-                <span class="text-xs">報表</span>
+                <span class="text-xl">📊</span><span class="text-xs">報表</span>
             </button>
         </div>
     </div>
 
     <script>
-        // 已經更新為你截圖 image_0e28d6.png 中的最新網址
         const state = {
-            apiUrl: 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec', 
+            apiUrl: 'https://script.google.com/macros/s/AKfycbw68ZDjI5kzUyhj_QyfYmrzyRvIdG58bZytZ4ft8MYkjs23CUlbuBfyEH7-SjLL0HXbhA/exec',
             items: [],
             token: 'default_token'
         };
 
-        // 網頁載入後自動執行同步
-        window.onload = function() {
-            syncData();
-        };
+        window.onload = syncData;
 
         async function syncData() {
             const list = document.getElementById('inventory-list');
             list.innerHTML = '<div class="p-10 text-center text-gray-400 animate-pulse font-medium">正在連線雲端資料庫...</div>';
-            
             try {
                 const res = await fetch(state.apiUrl, {
                     method: 'POST',
@@ -89,23 +75,17 @@
                     list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">同步失敗：${data.error}</div>`;
                 }
             } catch (e) {
-                list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">連線錯誤<br><span class="text-xs font-normal text-gray-500">請確認 GAS 權限已設為「所有人」</span></div>`;
+                list.innerHTML = `<div class="p-10 text-center text-red-400 font-bold">連線錯誤，請檢查網路或 GAS 權限</div>`;
             }
         }
 
         function renderItems() {
             const list = document.getElementById('inventory-list');
-            if (state.items.length === 0) {
-                list.innerHTML = '<div class="p-10 text-center text-gray-500">目前沒有盤點資料</div>';
-                return;
-            }
-
             list.innerHTML = state.items.map(item => {
                 let statusClass = 'card-none';
                 if (item.userCount !== undefined) {
                     statusClass = item.userCount === item.stock ? 'card-green' : 'card-red';
                 }
-
                 return `
                     <div class="p-4 rounded-xl ${statusClass} bg-gray-800 shadow-sm border border-gray-700">
                         <div class="flex justify-between items-center">
@@ -132,16 +112,20 @@
 
         function markCorrect(key) {
             const item = state.items.find(i => i.itemKey === key);
-            item.userCount = item.stock;
-            renderItems();
+            if (item) {
+                item.userCount = item.stock;
+                renderItems();
+            }
         }
 
         function askCount(key) {
             const val = prompt('請輸入實際盤點數量：');
             if (val !== null && val !== "") {
                 const item = state.items.find(i => i.itemKey === key);
-                item.userCount = parseInt(val) || 0;
-                renderItems();
+                if (item) {
+                    item.userCount = parseInt(val) || 0;
+                    renderItems();
+                }
             }
         }
 
@@ -154,23 +138,20 @@
                 const data = await res.json();
                 if (!data.ok) return alert('抓取資料失敗：' + data.error);
 
-                const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`[cite: 1]];
-                const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"[cite: 1]];
-                const footer1 = ["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"[cite: 1]];
-                const footer2 = ["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"[cite: 1]];
-
-                const ws = XLSX.utils.aoa_to_sheet([title, headers, ...data.sales, [], footer1, footer2]);
+                const ws = XLSX.utils.aoa_to_sheet([
+                    [`${data.year}年 ${data.month} 月 銷售記錄`],
+                    ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"],
+                    ...data.sales,
+                    [],
+                    ["總金額", data.summary.total, "PPF", data.summary.ppf]
+                ]);
                 ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "銷售明細");
-                XLSX.writeFile(wb, `115-${data.month}-OTC_銷售報表.xlsx`);
+                XLSX.writeFile(wb, `銷售報表.xlsx`);
             } catch (e) {
-                alert('匯出失敗，請檢查網路連線');
+                alert('匯出失敗');
             }
-        }
-
-        function exportInventoryReport() {
-            alert('盤點差異報表功能開發中。');
         }
 
         function showPage(p) {
