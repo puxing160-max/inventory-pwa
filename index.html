@@ -1,486 +1,106 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#111827" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>庫存盤點系統 v2.2</title>
+<!-- 這裡只列出關鍵修改的 Script 部分，確保你的 HTML 結構包含 id="page-report" -->
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
-
-  <style>
-    :root {
-      --bg:         #0f1117;
-      --surface:    #1a1d27;
-      --surface2:   #22263a;
-      --border:     #2e3350;
-      --text:       #e8eaf0;
-      --text-muted: #7880a0;
-      --accent:     #4f8ef7;
-      --accent-dim: #1e2d4d;
-      --ok:         #22c55e;
-      --ok-dim:     #0d2d1a;
-      --err:        #ef4444;
-      --err-dim:    #2d0d0d;
-      --warn:       #f59e0b;
-    }
-
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; overscroll-behavior: none; }
-    .mono { font-family: 'Space Mono', monospace; }
-    .muted { color: var(--text-muted); }
-    .hidden { display: none !important; }
-    .page { display: none; }
-    .page.active { display: flex; flex-direction: column; min-height: 100dvh; }
-    .slide-in { animation: slideIn 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
-    @keyframes slideIn { from { transform: translateX(32px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    .card-uncounted { background: var(--surface); border: 1.5px solid var(--border); }
-    .card-ok { background: var(--ok-dim); border: 1.5px solid var(--ok); }
-    .card-err { background: var(--err-dim); border: 1.5px solid var(--err); }
-    input, select { background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px 14px; font-size: 1rem; outline: none; width: 100%; }
-    input:focus, select:focus { border-color: var(--accent); }
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; border: none; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-ghost { background: var(--surface2); color: var(--text); border: 1.5px solid var(--border); }
-    .btn-danger { background: var(--err); color: #fff; }
-    .btn-ok { background: var(--ok); color: #000; }
-    .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--accent); transition: width 0.35s ease; }
-    #tabbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1.5px solid var(--border); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
-    .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 4px 6px; color: var(--text-muted); font-size: 0.65rem; font-weight: 700; }
-    .tab-item.active { color: var(--accent); }
-    .top-header { position: sticky; top: 0; z-index: 50; background: var(--bg); border-bottom: 1.5px solid var(--border); padding: 10px 16px; }
-    .item-card { border-radius: 14px; padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-    .action-btn { width: 48px; height: 48px; border-radius: 12px; font-size: 1.3rem; font-weight: 900; border: 2px solid transparent; display: flex; align-items: center; justify-content: center; background: var(--surface2); color: var(--text-muted); }
-    .action-btn.selected.action-btn-ok { background: var(--ok); color: #000; }
-    .action-btn.selected.action-btn-err { background: var(--err); color: #fff; }
-    .count-btn { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 14px; font-size: 1.35rem; font-weight: 700; color: var(--text); height: 64px; }
-    .badge { padding: 2px 8px; border-radius: 99px; font-size: 0.7rem; font-weight: 700; }
-    .badge-ok { background: var(--ok-dim); color: var(--ok); }
-    .badge-err { background: var(--err-dim); color: var(--err); }
-    .badge-new { background: var(--accent-dim); color: var(--accent); }
-    #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #fff; color: #111; padding: 10px 20px; border-radius: 999px; font-weight: 700; opacity: 0; transition: opacity 0.2s; z-index: 999; }
-    #toast.show { opacity: 1; }
-    #detail-page { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: none; flex-direction: column; transform: translateY(100%); transition: transform 0.28s ease; }
-    #detail-page.open { display: flex; transform: translateY(0); }
-    .toggle-group { display: flex; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 3px; }
-    .toggle-opt { flex: 1; text-align: center; padding: 7px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); }
-    .toggle-opt.active { background: var(--accent); color: #fff; }
-  </style>
-</head>
-<body>
-
-<div id="toast"></div>
-
-<!-- 登入頁 -->
-<div id="auth-page">
-  <div class="flex items-center justify-center min-h-screen p-6">
-    <div class="w-full max-w-sm bg-slate-900 border border-slate-700 p-8 rounded-3xl shadow-2xl">
-      <div class="mb-6 text-center">
-        <h1 class="text-2xl font-black mb-2">診所庫存系統</h1>
-        <p class="text-slate-400 text-sm">請選擇員工並輸入密碼以同步資料</p>
-      </div>
-      <div class="space-y-4">
-        <select id="auth-employee">
-          <option value="">選擇員工</option>
-          <option value="鄒宗諺">鄒宗諺</option>
-          <option value="黃巧伶">黃巧伶</option>
-          <option value="陳怡馨">陳怡馨</option>
-          <option value="蕭文憶">蕭文憶</option>
-        </select>
-        <input type="password" id="auth-password" placeholder="診所密碼" />
-        <button id="login-btn" class="btn btn-primary w-full" onclick="login()">登入並同步</button>
-        <div id="auth-error" class="text-red-500 text-sm hidden text-center"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 主程式 -->
-<div id="app-shell" class="hidden">
-  <nav id="tabbar">
-    <div class="tab-item active" onclick="switchTab('list')">📋盤點</div>
-    <div class="tab-item" onclick="switchTab('report')">📊報表</div>
-    <div class="tab-item" onclick="switchTab('settings')">⚙️設定</div>
-  </nav>
-
-  <div id="page-list" class="page active">
-    <div class="top-header">
-      <div class="flex justify-between items-end mb-3">
-        <div>
-          <span class="badge badge-new mb-1 inline-block" id="employee-badge">載入中</span>
-          <h1 class="text-xl font-black">庫存盤點</h1>
-        </div>
-        <button class="btn btn-ghost text-xs px-3 py-1" onclick="syncInventory()">↻ 同步雲端</button>
-      </div>
-      <div class="progress-bar mb-2"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-      <p class="text-[10px] muted mb-3" id="progress-text">已完成 0 / 0 項</p>
-      <input type="text" id="search-input" placeholder="🔍 搜尋品項名稱或代碼..." oninput="renderList()" />
-      <div class="toggle-group mt-3">
-        <div class="toggle-opt active" id="mode-route" onclick="setMode('route')">動線排序</div>
-        <div class="toggle-opt" id="mode-all" onclick="setMode('all')">全品項</div>
-      </div>
-    </div>
-    <div class="flex-1 overflow-y-auto px-4 pt-4 pb-24" id="item-list"></div>
-  </div>
-
-  <!-- 報表頁與設定頁省略，保持原邏輯但數據同步 -->
-  <div id="page-report" class="page">
-    <div class="top-header"><h1 class="text-lg font-black">報表匯出</h1></div>
-    <div class="p-4 space-y-4">
-      <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
-        <div class="grid grid-cols-3 text-center">
-          <div><p class="text-2xl font-black mono" id="rpt-total">0</p><p class="text-xs muted">總數</p></div>
-          <div><p class="text-2xl font-black mono text-green-500" id="rpt-ok">0</p><p class="text-xs muted">正確</p></div>
-          <div><p class="text-2xl font-black mono text-red-500" id="rpt-err">0</p><p class="text-xs muted">異常</p></div>
-        </div>
-      </div>
-      <div id="anomaly-list" class="space-y-2"></div>
-      <button class="btn btn-primary w-full" onclick="exportAllReport()">⬇ 匯出完整盤點結果 (.xlsx)</button>
-    </div>
-  </div>
-
-  <div id="page-settings" class="page">
-    <div class="top-header"><h1 class="text-lg font-black">系統設定</h1></div>
-    <div class="p-4 space-y-4">
-      <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
-        <p class="text-sm font-bold mb-2">帳號狀態</p>
-        <p class="text-xs muted mb-4" id="settings-employee">—</p>
-        <button class="btn btn-danger w-full" onclick="logout()">登出帳號</button>
-      </div>
-      <button class="btn btn-ghost w-full" onclick="resetCount()">🗑 清除本次盤點進度</button>
-    </div>
-  </div>
-
-  <!-- 詳情頁 -->
-  <div id="detail-page">
-    <div class="top-header flex items-center gap-4">
-      <button onclick="closeDetail()" class="text-xl">✕</button>
-      <div class="flex-1 truncate">
-        <p class="font-black text-base truncate" id="d-name">品項名稱</p>
-        <p class="mono text-[10px] muted" id="d-code">CODE</p>
-      </div>
-      <span class="badge" id="d-badge">-</span>
-    </div>
-    <div class="p-6 space-y-6">
-      <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 flex justify-around">
-        <div class="text-center"><p class="text-xs muted mb-1">雲端庫存</p><p class="text-4xl font-black mono" id="d-stock">0</p></div>
-        <div class="text-center"><p class="text-xs muted mb-1">實盤數量</p><p class="text-4xl font-black mono text-blue-500" id="d-count">0</p></div>
-      </div>
-      <div class="grid grid-cols-4 gap-3">
-        <button class="count-btn" onclick="addCount(1)">+1</button>
-        <button class="count-btn" onclick="addCount(3)">+3</button>
-        <button class="count-btn" onclick="addCount(5)">+5</button>
-        <button class="count-btn" onclick="addCount(10)">+10</button>
-      </div>
-      <div class="flex gap-2">
-        <input type="number" id="d-manual-input" placeholder="手動輸入總量" />
-        <button class="btn btn-ok px-6" onclick="setCountManual()">確認</button>
-      </div>
-      <input type="text" id="d-note" placeholder="備註 (選填)" oninput="saveNote()" />
-      <button class="btn btn-ghost w-full" onclick="resetThisItem()">重設此項</button>
-    </div>
-  </div>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-/* ─── 設定與資料 ────────────────────────────────── */
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzlP0T9b0wOPnEw8fL4LbHP9Y7OL3k-l7Wkv9084HC0G3BaI_WubfRodKxUTp2gWn6yxg/exec';
-
-// 根據截圖重新校對的物理動線順序[cite: 1, 2, 3]
-const ROUTE_ORDER = [
-  'IFC海綿組', '電療貼片(大)', '電療貼片(小)', 
-  'S-51人性化加強型護腰 S', 'S-51人性化加強型護腰 M', 'S-51人性化加強型護腰 L', 'S-51人性化加強型護腰 XL', 'S-51人性化加強型護腰 XXL',
-  'ZS-501 日興護腰 S', 'ZS-501 日興護腰 M', 'ZS-501 日興護腰 L', 'ZS-501 日興護腰 XL',
-  '4074-Rib belt (女)', 
-  'S-44加強型護頸M', 'S-44加強型護頸L',
-  'MHC-515電熱毯(肩)',
-  'H-86 竹炭人性化護肩 M', 'H-86 竹炭人性化護肩 L', 'H-86 竹炭人性化護肩 XL',
-  'S-17 矽膠軟墊護肘 FREE', 'S-41機能型護肘M', 'S-41機能型護肘L', 'T-48立體型連指護腕 FREE',
-  'S-26三支架護指 S', 'S-26三支架護指 M', 'S-26三支架護指 L',
-  'O-10奈米竹炭(加強型)護腕 FREE',
-  '1289 wrist/tuhmb support S', '1289 wrist/tuhmb support M',
-  'S-23左右共用手托板S', 'S-23左右共用手托板M', 'S-23左右共用手托板L',
-  'TFCC wrist widget',
-  'H-20專業調整式護踝 FREE', // 依照要求放在 TFCC 之後
-  '53100 腕關節夾板', '4388 Sliding-Fit wrist brace M(右)',
-  'AIR CAST HEEL S', 'AIR CAST HEEL M',
-  'S-19膝部反拉加強帶(髕骨帶) FREE',
-  'S-49雙拉式透氣護膝M', 'S-49雙拉式透氣護膝L', 'S-49雙拉式透氣護膝XL',
-  'S-45網狀高透氣護膝 S', 'S-45網狀高透氣護膝 M', 'S-45網狀高透氣護膝 L', 'S-45網狀高透氣護膝 XL',
-  'S-20矽膠單側條護膝 FREE', // 依照要求放在 S-45 與 O-26 之間
-  'O-26 竹炭雙側條護膝M', 'O-26 竹炭雙側條護膝L', 'O-26 竹炭雙側條護膝XL',
-  'T-35人性化加強型護踝 M', 'T-35人性化加強型護踝 L',
-  'T-25人性化繃帶型護踝 M', 'T-25人性化繃帶型護踝 L', 'T-25人性化繃帶型護踝 XL',
-  'B-4601 6 CM 按摩球',
-  'IFC電極線', 'IFC吸杯', 'TENS 電極線', '牽引機警報線'
-];
-
-const FUZZY_ALIASES = {
-  'tfcc': 'TFCC wrist widget',
-  '按摩球': 'B-4601 6 CM 按摩球',
-  '海綿': 'IFC海綿組',
-  '電熱毯': 'MHC-515電熱毯(肩)',
-  's20': 'S-20矽膠單側條護膝 FREE'
-};
-
-const STORAGE_KEY = 'inv_system_v2_2_state';
-
-/* ─── 核心邏輯 ────────────────────────────────── */
-let state = {
-  apiUrl: DEFAULT_API_URL,
-  inventoryItems: [],
-  counts: {},
-  checked: {},
-  notes: {},
-  mode: 'route',
-  auth: { token: '', employeeName: '' }
-};
-
-// 初始化
-window.onload = () => {
-  loadState();
-  if (state.auth.token) {
-    showAppShell();
-    renderAll();
-  } else {
-    showAuthPage();
-  }
-};
-
-function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) state = { ...state, ...JSON.parse(saved) };
+// --- 核心邏輯：盤點項目渲染 ---
+function renderInventory(items) {
+    const list = document.getElementById('inventory-list');
+    list.innerHTML = items.map(item => `
+        <div class="card p-4 mb-3 bg-gray-800 rounded-lg border-l-4 ${getBorderColor(item)}">
+            <div class="flex justify-between items-center">
+                <div>
+                    <div class="text-xs text-gray-400">${item.code}</div>
+                    <div class="font-bold text-lg">${item.name}</div>
+                    <div class="text-sm text-blue-400">雲端庫存: ${item.stock}</div>
+                </div>
+                
+                <div class="flex gap-2">
+                    <!-- 一鍵打勾：代表數量正確 -->
+                    <button onclick="confirmCorrect('${item.itemKey}')" 
+                            class="p-3 bg-green-600 rounded-full hover:bg-green-500 shadow-lg">
+                        ✅
+                    </button>
+                    <!-- 點擊叉叉：代表數量有誤，進入輸入模式 -->
+                    <button onclick="showEditModal('${item.itemKey}')" 
+                            class="p-3 bg-red-600 rounded-full hover:bg-red-500 shadow-lg">
+                        ❌
+                    </button>
+                </div>
+            </div>
+            ${item.userCount !== undefined ? `<div class="mt-2 text-right font-bold text-yellow-400">實盤: ${item.userCount}</div>` : ''}
+        </div>
+    `).join('');
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+// 一鍵確認正確：直接將實盤數設為雲端數
+function confirmCorrect(itemKey) {
+    const item = state.items.find(i => i.itemKey === itemKey);
+    item.userCount = item.stock;
+    item.status = 'correct';
+    renderInventory(state.items);
 }
 
-// 登入功能
-async function login() {
-  const employeeName = document.getElementById('auth-employee').value;
-  const password = document.getElementById('auth-password').value;
-  const btn = document.getElementById('login-btn');
-  
-  if (!employeeName || !password) return alert('請填寫完整資訊');
-  
-  btn.innerText = '驗證中...';
-  try {
-    const res = await fetch(state.apiUrl, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'login', employeeName, password })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      state.auth = { token: data.token, employeeName: data.employeeName };
-      saveState();
-      showAppShell();
-      syncInventory();
-    } else {
-      alert(data.error || '登入失敗');
+// --- 核心邏輯：匯出銷售 PPF 報表 (對應 115-4-OTC PPF_2.xlsx) ---
+async function exportPPF() {
+    toast('正在產出 115-4-OTC PPF 報表...');
+    try {
+        const res = await fetch(state.apiUrl, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: 'getSalesExport', 
+                token: state.auth.token 
+            })
+        });
+        const data = await res.json();
+        
+        if (!data.ok || data.sales.length === 0) return toast('⚠️ 本月尚無銷售資料');
+
+        // 1. 建立標題列與欄位
+        const title = [`${data.year}年 ${data.month} 月 復健科OTC銷售記錄`];
+        const headers = ["日期", "姓名", "類別", "品項", "定價", "數量", "折扣", "售價", "備註"];
+        
+        // 2. 準備資料列
+        const rows = [...data.sales];
+
+        // 3. 按照 115-4-OTC PPF_2.xlsx 格式加入底部統計區
+        // 留白兩列
+        rows.push([], []); 
+        rows.push(["總金額", data.summary.total, "PPF", data.summary.ppf, "", "審核"]);
+        rows.push(["實收金額", data.summary.realAmount, "備註", "ppf已繳入復健科公費", "", "製表"]);
+
+        const ws = XLSX.utils.aoa_to_sheet([title, headers, ...rows]);
+        
+        // 設定單元格樣式與合併 (A1 到 I1 合併)
+        ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:8} }];
+        
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        
+        XLSX.writeFile(wb, `${data.year}-${data.month}-OTC_PPF.xlsx`);
+        toast('✅ 銷售報表已下載');
+    } catch (e) {
+        toast('❌ 匯出失敗: ' + e.message);
     }
-  } catch (e) {
-    alert('網路錯誤或 API 設定有誤');
-  } finally {
-    btn.innerText = '登入並同步';
-  }
 }
 
-// 同步庫存
-async function syncInventory() {
-  if (!state.auth.token) return;
-  toast('同步雲端資料中...');
-  try {
-    const res = await fetch(state.apiUrl, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'inventory', token: state.auth.token })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      state.inventoryItems = data.items;
-      rebuildCheckedStatuses();
-      saveState();
-      renderAll();
-      toast('✅ 資料已更新');
-    }
-  } catch (e) {
-    toast('❌ 同步失敗');
-  }
-}
-
-// 渲染列表
-function renderList() {
-  const container = document.getElementById('item-list');
-  const query = document.getElementById('search-input').value.toLowerCase();
-  
-  // 決定顯示清單
-  let items = [];
-  if (state.mode === 'route') {
-    items = ROUTE_ORDER.map(name => {
-      const match = state.inventoryItems.find(i => i.name === name);
-      return match || { name, code: 'N/A', stock: 0, itemKey: name };
-    });
-  } else {
-    items = state.inventoryItems;
-  }
-
-  // 搜尋過濾
-  const filtered = items.filter(i => i.name.toLowerCase().includes(query) || i.code.toLowerCase().includes(query));
-
-  container.innerHTML = filtered.map(item => {
-    const count = state.counts[item.itemKey] ?? '-';
-    const status = state.checked[item.itemKey] || 'uncounted';
-    let cardClass = 'card-uncounted';
-    if (status === 'ok') cardClass = 'card-ok';
-    if (status === 'err') cardClass = 'card-err';
-
-    return `
-      <div class="item-card ${cardClass}" onclick="openDetail('${item.itemKey}')">
-        <div class="flex-1 min-w-0">
-          <p class="text-xs muted mono mb-1">${item.code}</p>
-          <p class="font-bold text-sm truncate">${item.name}</p>
-        </div>
-        <div class="text-right">
-          <p class="text-xs muted">雲端: ${item.stock ?? 0}</p>
-          <p class="text-lg font-black mono">${count}</p>
-        </div>
-        <div class="action-btn ${status === 'ok' ? 'selected action-btn-ok' : ''} ${status === 'err' ? 'selected action-btn-err' : ''}">
-          ${status === 'ok' ? '✓' : status === 'err' ? '⚠' : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  updateProgress();
-}
-
-// 盤點操作
-function openDetail(key) {
-  const item = state.inventoryItems.find(i => i.itemKey === key) || { name: key, code: 'N/A', stock: 0, itemKey: key };
-  state.currentItem = item;
-  
-  document.getElementById('d-name').innerText = item.name;
-  document.getElementById('d-code').innerText = item.code;
-  document.getElementById('d-stock').innerText = item.stock ?? 0;
-  document.getElementById('d-count').innerText = state.counts[key] ?? 0;
-  document.getElementById('d-note').value = state.notes[key] || '';
-  
-  const page = document.getElementById('detail-page');
-  page.style.display = 'flex';
-  setTimeout(() => page.classList.add('open'), 10);
-}
-
-function addCount(val) {
-  const key = state.currentItem.itemKey;
-  state.counts[key] = (state.counts[key] || 0) + val;
-  updateDetailUI();
-}
-
-function setCountManual() {
-  const val = parseInt(document.getElementById('d-manual-input').value);
-  if (isNaN(val)) return;
-  state.counts[state.currentItem.itemKey] = val;
-  document.getElementById('d-manual-input').value = '';
-  updateDetailUI();
-}
-
-function updateDetailUI() {
-  const key = state.currentItem.itemKey;
-  const count = state.counts[key];
-  document.getElementById('d-count').innerText = count;
-  
-  // 自動比對
-  if (count === state.currentItem.stock) {
-    state.checked[key] = 'ok';
-  } else {
-    state.checked[key] = 'err';
-  }
-  saveState();
-}
-
-function closeDetail() {
-  const page = document.getElementById('detail-page');
-  page.classList.remove('open');
-  setTimeout(() => { page.style.display = 'none'; renderList(); }, 300);
-}
-
-// 工具
-function switchTab(tab) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
-  document.getElementById(`page-${tab}`).classList.add('active');
-  event.currentTarget.classList.add('active');
-  if (tab === 'report') renderReport();
-}
-
-function setMode(m) {
-  state.mode = m;
-  document.getElementById('mode-route').classList.toggle('active', m === 'route');
-  document.getElementById('mode-all').classList.toggle('active', m === 'all');
-  renderList();
-}
-
-function toast(m) {
-  const t = document.getElementById('toast');
-  t.innerText = m;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2000);
-}
-
-function updateProgress() {
-  const total = ROUTE_ORDER.length;
-  const done = Object.keys(state.checked).length;
-  const pc = (done / total) * 100;
-  document.getElementById('progress-fill').style.width = `${pc}%`;
-  document.getElementById('progress-text').innerText = `已完成 ${done} / ${total} 項`;
-}
-
-function showAppShell() {
-  document.getElementById('auth-page').classList.add('hidden');
-  document.getElementById('app-shell').classList.remove('hidden');
-  document.getElementById('employee-badge').innerText = state.auth.employeeName;
-}
-
-function logout() {
-  if (confirm('確定登出？')) {
-    state.auth = { token: '', employeeName: '' };
-    saveState();
-    location.reload();
-  }
-}
-
-function renderAll() { renderList(); updateSessionUI(); }
-function updateSessionUI() { document.getElementById('settings-employee').innerText = `登入者: ${state.auth.employeeName}`; }
-function rebuildCheckedStatuses() {
-  Object.keys(state.counts).forEach(key => {
-    const item = state.inventoryItems.find(i => i.itemKey === key);
-    if (item) state.checked[key] = (state.counts[key] === item.stock) ? 'ok' : 'err';
-  });
-}
-function resetCount() { if(confirm('清除所有進度？')) { state.counts = {}; state.checked = {}; state.notes = {}; saveState(); renderAll(); } }
-function resetThisItem() { state.counts[state.currentItem.itemKey] = 0; state.checked[state.currentItem.itemKey] = 'err'; updateDetailUI(); }
-function saveNote() { state.notes[state.currentItem.itemKey] = document.getElementById('d-note').value; saveState(); }
-
-function exportAllReport() {
-  const data = state.inventoryItems.map(i => ({
-    代碼: i.code,
-    名稱: i.name,
-    雲端庫存: i.stock,
-    實盤數量: state.counts[i.itemKey] ?? 0,
-    差異: (state.counts[i.itemKey] ?? 0) - i.stock,
-    備註: state.notes[i.itemKey] || ''
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "盤點結果");
-  XLSX.writeFile(wb, `盤點報表_${new Date().toLocaleDateString()}.xlsx`);
+function getBorderColor(item) {
+    if (item.userCount === undefined) return 'border-gray-600';
+    return item.userCount === item.stock ? 'border-green-500' : 'border-red-500';
 }
 </script>
-</body>
-</html>
+
+<!-- 在報表頁面的 HTML 部分加入按鈕 -->
+<div id="page-report" class="page hidden p-4">
+    <div class="space-y-4">
+        <!-- 綠色按鈕：匯出符合 PPF_2 格式的銷售表 -->
+        <button onclick="exportPPF()" class="w-full py-4 bg-green-700 text-white rounded-xl font-bold shadow-lg">
+            📊 生成當月銷售明細 (PPF 格式)
+        </button>
+        
+        <!-- 藍色按鈕：原本的盤點結果匯出 -->
+        <button onclick="exportInventoryReport()" class="w-full py-4 bg-blue-700 text-white rounded-xl font-bold">
+            ⬇ 匯出當次盤點結果 (.xlsx)
+        </button>
+    </div>
+</div>
