@@ -212,12 +212,10 @@
         </div>
       </div>
       <div><p class="divider-label">⚠ 異常品項</p><div id="anomaly-list" class="space-y-2"></div></div>
-      <div><p class="divider-label">💰 本月銷售 (PPF)</p><div id="ppf-list" class="space-y-2"></div></div>
-      <div class="space-y-3 pb-4">
+      <div class="space-y-3 pb-4 pt-4">
         <button class="btn btn-danger  w-full" onclick="exportAnomalyReport()">⬇ 匯出異常報表 (.xlsx)</button>
-        <button class="btn btn-primary w-full" onclick="exportPPFReport()">⬇ 匯出 PPF 對帳報表 (.xlsx)</button>
         <button class="btn btn-ghost   w-full" onclick="exportAllReport()">⬇ 匯出完整盤點結果 (.xlsx)</button>
-        <button class="btn btn-ghost   w-full" onclick="exportSalesReport()">⬇ 匯出當月銷售明細 (.xlsx)</button>
+        <button class="btn btn-primary w-full" onclick="exportSalesReport()">⬇ 匯出當月銷售明細 (.xlsx)</button>
       </div>
     </div>
   </div>
@@ -362,7 +360,6 @@ function formatDateTime(value) {
 }
 function normalizeApiUrl(url) { return String(url || '').trim().replace(/\/+$/, ''); }
 
-// ✅ 修正防呆阻擋機制：只要網址不是空的就放行
 function isApiConfigured() {
   const url = normalizeApiUrl(state.apiUrl);
   return url !== '';
@@ -487,7 +484,6 @@ function fuzzyMatch(target, query) {
   return t.includes(q);
 }
 
-// ⭐ 全新優化版本的 getRouteItems，自動帶出同類別所有尺寸
 function getRouteItems(query = '') {
   const results = [];
   const seen = new Set(); 
@@ -623,8 +619,6 @@ function renderReport() {
     const count = getCount(it.itemKey); const diff = count - it.stock;
     return `<div class="rounded-xl p-3 card-err"><div class="flex justify-between items-start gap-3"><div class="min-w-0"><p class="font-bold text-sm">${escapeHtml(it.name)}</p><p class="mono text-xs" style="color:var(--err)">${escapeHtml(it.code)}</p></div><div class="text-right"><p class="mono text-sm">雲端 <b>${it.stock}</b> → 實盤 <b>${count}</b></p><p class="mono text-xs" style="color:var(--err)">差異 ${diff > 0 ? '+' : ''}${diff}</p></div></div></div>`;
   }).join('') : '<p class="text-center py-6" style="color:var(--text-muted)">🎉 無異常品項</p>';
-  const ppfItems = items.filter(it => it.sales > 0);
-  document.getElementById('ppf-list').innerHTML = ppfItems.length ? ppfItems.map(it => `<div class="rounded-xl p-3" style="background:var(--surface); border:1.5px solid var(--border)"><div class="flex justify-between gap-3"><div class="min-w-0"><p class="font-bold text-sm">${escapeHtml(it.name)}</p><p class="mono text-xs" style="color:var(--text-muted)">${escapeHtml(it.code)}</p></div><div class="text-right"><p class="mono text-sm font-bold">× ${it.sales}</p><p class="mono text-xs" style="color:var(--ok)">$${Number(it.amount || 0).toLocaleString()}</p></div></div></div>`).join('') : '<p class="text-center py-6" style="color:var(--text-muted)">無銷售記錄</p>';
 }
 function renderAll() { updateSessionUI(); renderList(); if (currentTab === 'report') renderReport(); if (currentTab === 'settings') loadSettingsUI(); }
 
@@ -675,7 +669,8 @@ function exportXLSX(data, sheetName) {
   const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheetName); XLSX.writeFile(wb, `${sheetName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 function exportAnomalyReport() { const data = getAnomalyData(); if (!data.length) { toast('⚠ 無異常品項可匯出'); return; } exportXLSX(data, '異常報表'); toast('⬇ 異常報表已下載'); }
-function exportPPFReport() { const data = state.inventoryItems.filter(it => it.sales > 0).map(it => ({ '品號': it.code, '品名': it.name, '本月售出': it.sales, '銷售金額': it.amount })); if (!data.length) { toast('⚠ 無銷售記錄'); return; } exportXLSX(data, 'PPF對帳報表'); toast('⬇ PPF 報表已下載'); }
+
+// ⭐ 銷售匯出：純複製模式 ⭐
 async function exportSalesReport(){
   toast('正在抓取銷售資料...');
   try{
@@ -683,15 +678,44 @@ async function exportSalesReport(){
     const res  = await fetch(apiUrl, {method:'POST', body: JSON.stringify({action:'getSalesExport', token: state.auth.token})});
     const data = await res.json();
     if(!data.ok){ alert('抓取失敗：'+data.error); return; }
-    const rows = data.sales.map(r => [r[0]||'',r[1]||'',r[2]||'',r[3]||'',r[4]||'',r[5]||'',r[6]||'',r[7]||'',r[8]||'']);
-    const total = data.summary.total; const ppf = data.summary.ppf; const real = data.summary.realAmount || (total - ppf);
-    const title = data.year+'年  '+data.month+' 月 復健科OTC銷售記錄 '; const header = ['日期','姓名','類別','品項','定價','數量','折扣','售價','備註'];
-    const blankCount = Math.max(0, 36 - rows.length); const blanks = Array.from({length: blankCount}, () => ['','','','','','','','','']);
-    const aoa = [ [title,'','','','','','','',''], header, ...rows, ...blanks, ['','','','','','','','',''], ['總金額', total, 'PPF', ppf, '審核','','','',''], ['實收金額', real, '備註', 'ppf已繳入復健科公費', '製表','','','',''] ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:8}}]; ws['!cols'] = [{wch:10},{wch:8},{wch:8},{wch:26},{wch:8},{wch:5},{wch:6},{wch:8},{wch:20}];
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sheet1'); XLSX.writeFile(wb, data.year+'-'+data.month+'-OTC_PPF.xlsx'); toast('✅ 匯出完成');
-  } catch(e){ alert('匯出失敗：'+e); }
+    
+    // data.sales 已經是我們從後端原封不動抓過來的二維陣列了
+    const rows = data.sales;
+
+    if (rows.length === 0) {
+      toast('⚠ 找不到任何銷售紀錄');
+      return;
+    }
+
+    // 設定表頭 (對應您雲端表單的 A 到 K 欄)
+    const header = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '治療師', '', '備註'];
+    
+    // 組合最終要寫入 Excel 的資料
+    const aoa = [
+      header,
+      ...rows
+    ];
+
+    // 建立 Excel 工作表
+    const ws = XLSX.utils.aoa_to_sheet(aoa); 
+    
+    // 設定欄寬，讓 Excel 看起來比較舒服
+    ws['!cols'] = [{wch:12},{wch:10},{wch:12},{wch:30},{wch:10},{wch:6},{wch:8},{wch:10},{wch:10},{wch:2},{wch:25}];
+
+    const wb = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(wb, ws, '銷售明細'); 
+    
+    // 儲存檔案
+    const now = new Date();
+    const fileName = `${now.getFullYear() - 1911}年${now.getMonth() + 1}月_OTC銷售明細.xlsx`;
+    XLSX.writeFile(wb, fileName); 
+    
+    toast('✅ 匯出完成');
+  } catch(e){ 
+    alert('匯出失敗：'+e); 
+  }
 }
+
 function exportAllReport() {
   const rows = state.inventoryItems.map(it => { const c = getCount(it.itemKey); return { '品號': it.code, '品名': it.name, '雲端庫存': it.stock ?? '', '實盤數量': c ?? '', '差異': c !== null && it.stock !== null ? c - it.stock : '', '狀態': c === null ? '未盤點' : (c === it.stock ? '正確' : '異常'), '備註': state.notes[it.itemKey] || '' }; });
   if (!rows.length) { toast('⚠ 尚無可匯出資料'); return; } exportXLSX(rows, '完整盤點結果'); toast('⬇ 完整報表已下載');
