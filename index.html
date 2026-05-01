@@ -360,6 +360,7 @@ function formatDateTime(value) {
 }
 function normalizeApiUrl(url) { return String(url || '').trim().replace(/\/+$/, ''); }
 
+// ✅ 放行機制
 function isApiConfigured() {
   const url = normalizeApiUrl(state.apiUrl);
   return url !== '';
@@ -670,7 +671,7 @@ function exportXLSX(data, sheetName) {
 }
 function exportAnomalyReport() { const data = getAnomalyData(); if (!data.length) { toast('⚠ 無異常品項可匯出'); return; } exportXLSX(data, '異常報表'); toast('⬇ 異常報表已下載'); }
 
-// ⭐ 銷售匯出：純複製模式 ⭐
+// ⭐ 銷售匯出：純複製模式 (含過濾無效的公式列) ⭐
 async function exportSalesReport(){
   toast('正在抓取銷售資料...');
   try{
@@ -679,21 +680,28 @@ async function exportSalesReport(){
     const data = await res.json();
     if(!data.ok){ alert('抓取失敗：'+data.error); return; }
     
-    // data.sales 已經是我們從後端原封不動抓過來的二維陣列了
+    // 取得後端傳來的資料
     const rows = data.sales;
 
-    if (rows.length === 0) {
-      toast('⚠ 找不到任何銷售紀錄');
+    // 🏆 新增過濾器：過濾掉因為 Excel 公式產生的幽靈資料
+    // 邏輯：只要該列的「品項」欄位 (index 3) 是空白的，就代表沒有真的賣出東西，直接刪除！
+    const validRows = rows.filter(row => {
+      const item = String(row[3] || '').trim();
+      return item !== ''; 
+    });
+
+    if (validRows.length === 0) {
+      toast('⚠ 找不到任何有效的銷售紀錄');
       return;
     }
 
     // 設定表頭 (對應您雲端表單的 A 到 K 欄)
     const header = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '治療師', '', '備註'];
     
-    // 組合最終要寫入 Excel 的資料
+    // 組合最終要寫入 Excel 的資料 (只保留過濾後的 validRows)
     const aoa = [
       header,
-      ...rows
+      ...validRows
     ];
 
     // 建立 Excel 工作表
