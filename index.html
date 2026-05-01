@@ -291,7 +291,6 @@
 <!-- JavaScript -->
 <script>
 /* ─── 常數 ────────────────────────────────────── */
-// ⚠️ 請在這裡貼上您部署好的 Google Apps Script 網址 (記得要有引號包住)
 const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwEb7D7acFE7yv_N2hG53JvgibXkX1dwd5N3msyoTy1CO3vw5gGSm0mCnu34vpbkpmUqQ/exec'; 
 
 const ROUTE_ORDER = [
@@ -362,9 +361,11 @@ function formatDateTime(value) {
   return d.toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 function normalizeApiUrl(url) { return String(url || '').trim().replace(/\/+$/, ''); }
+
+// ✅ 修正防呆阻擋機制：只要網址不是空的就放行
 function isApiConfigured() {
   const url = normalizeApiUrl(state.apiUrl);
-  return url && !url.includes('https://script.google.com/macros/s/AKfycbwEb7D7acFE7yv_N2hG53JvgibXkX1dwd5N3msyoTy1CO3vw5gGSm0mCnu34vpbkpmUqQ/exec');
+  return url !== '';
 }
 
 /* ─── 本機儲存 ────────────────────────────────── */
@@ -495,7 +496,6 @@ function getRouteItems(query = '') {
     const rn = routeName.toLowerCase();
     const alias = FUZZY_ALIASES[rn];
 
-    // 使用 filter 取代 find，抓出所有包含關鍵字的品項 (如 S-51 的 S, M, L, XL)
     const matches = state.inventoryItems.filter(it => {
       const tName = it.name.toLowerCase();
       const tCode = it.code.toLowerCase();
