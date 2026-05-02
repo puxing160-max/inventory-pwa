@@ -671,7 +671,7 @@ function exportXLSX(data, sheetName) {
 }
 function exportAnomalyReport() { const data = getAnomalyData(); if (!data.length) { toast('⚠ 無異常品項可匯出'); return; } exportXLSX(data, '異常報表'); toast('⬇ 異常報表已下載'); }
 
-// ⭐ 銷售匯出：純複製模式 (含過濾無效的公式列) ⭐
+// ⭐ 銷售匯出：自動排版成最終格式 ⭐
 async function exportSalesReport(){
   toast('正在抓取銷售資料...');
   try{
@@ -680,42 +680,68 @@ async function exportSalesReport(){
     const data = await res.json();
     if(!data.ok){ alert('抓取失敗：'+data.error); return; }
     
-    // 取得後端傳來的資料
     const rows = data.sales;
-
-    // 🏆 新增過濾器：過濾掉因為 Excel 公式產生的幽靈資料
-    // 邏輯：只要該列的「品項」欄位 (index 3) 是空白的，就代表沒有真的賣出東西，直接刪除！
-    const validRows = rows.filter(row => {
-      const item = String(row[3] || '').trim();
-      return item !== ''; 
-    });
-
-    if (validRows.length === 0) {
+    if (rows.length === 0) {
       toast('⚠ 找不到任何有效的銷售紀錄');
       return;
     }
 
-    // 設定表頭 (對應您雲端表單的 A 到 K 欄)
-    const header = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '治療師', '', '備註'];
+    // 1. 準備標題列 (佔據第一列，合併儲存格)
+    const title = `${data.year}年 ${data.month} 月 復健科OTC銷售記錄`;
     
-    // 組合最終要寫入 Excel 的資料 (只保留過濾後的 validRows)
+    // 2. 準備表頭 (捨棄治療師與空白欄，配合您的截圖格式)
+    const header = ['日期', '姓名', '類別', '品項', '定價', '數量', '折扣', '售價', '備註'];
+    
+    // 3. 準備固定 20 列的資料區塊 (不足 20 列用空白補齊)
+    const maxRows = 20;
+    const dataBlock = [];
+    for (let i = 0; i < maxRows; i++) {
+      if (i < rows.length) {
+        dataBlock.push(rows[i]);
+      } else {
+        dataBlock.push(['', '', '', '', '', '', '', '', '']);
+      }
+    }
+
+    // 4. 準備底部總計區塊
+    const totalRow = ['總金額', data.summary.total, 'PPF', data.summary.ppf, '審核', '', '', '', ''];
+    const realRow  = ['實收金額', data.summary.realAmount, '備註', 'ppf已繳入復健科公費', '製表', '', '', '', ''];
+
+    // 5. 組合所有陣列
     const aoa = [
-      header,
-      ...validRows
+      [title, '', '', '', '', '', '', '', ''], // 第一列 (標題)
+      header,                                  // 第二列 (表頭)
+      ...dataBlock,                            // 第三到第二十二列 (資料+空白)
+      totalRow,                                // 第二十三列 (總計)
+      realRow                                  // 第二十四列 (實收)
     ];
 
-    // 建立 Excel 工作表
+    // 建立工作表
     const ws = XLSX.utils.aoa_to_sheet(aoa); 
     
-    // 設定欄寬，讓 Excel 看起來比較舒服
-    ws['!cols'] = [{wch:12},{wch:10},{wch:12},{wch:30},{wch:10},{wch:6},{wch:8},{wch:10},{wch:10},{wch:2},{wch:25}];
+    // 合併第一列的標題儲存格 (A1 到 I1)
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }
+    ];
+
+    // 設定欄寬，讓 Excel 比例跟您提供的範例一樣
+    ws['!cols'] = [
+      {wch:12}, // A 日期
+      {wch:10}, // B 姓名
+      {wch:12}, // C 類別
+      {wch:30}, // D 品項
+      {wch:10}, // E 定價
+      {wch:6},  // F 數量
+      {wch:8},  // G 折扣
+      {wch:10}, // H 售價
+      {wch:25}  // I 備註
+    ];
 
     const wb = XLSX.utils.book_new(); 
-    XLSX.utils.book_append_sheet(wb, ws, '銷售明細'); 
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1'); 
     
     // 儲存檔案
-    const now = new Date();
-    const fileName = `${now.getFullYear() - 1911}年${now.getMonth() + 1}月_OTC銷售明細.xlsx`;
+    const fileName = `${data.year}年${data.month}月_OTC銷售明細.xlsx`;
     XLSX.writeFile(wb, fileName); 
     
     toast('✅ 匯出完成');
